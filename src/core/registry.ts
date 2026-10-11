@@ -9,12 +9,16 @@ import type {
   PluginInfo,
   PortDefinition,
   PropertyDefinition,
+  SceneField,
+  SceneObjectKind,
+  SceneValue,
 } from './types'
 
 interface Snapshot {
   categories: Map<string, CategoryDefinition>
   dataTypes: Map<string, DataTypeDefinition>
   nodeTypes: Map<string, NodeTypeDefinition>
+  sceneObjects: Map<string, SceneObjectKind>
   owners: Map<string, string>
 }
 
@@ -26,6 +30,7 @@ export class Registry {
   private categories = new Map<string, CategoryDefinition>()
   private dataTypes = new Map<string, DataTypeDefinition>()
   private nodeTypes = new Map<string, NodeTypeDefinition>()
+  private sceneObjects = new Map<string, SceneObjectKind>()
   private owners = new Map<string, string>()
   private plugins: PluginInfo[] = []
   private currentPlugin: string | null = null
@@ -35,6 +40,7 @@ export class Registry {
     registerCategory: (category) => this.registerCategory(category),
     registerDataType: (dataType) => this.registerDataType(dataType),
     registerNodeType: (nodeType) => this.registerNodeType(nodeType),
+    registerSceneObject: (kind) => this.registerSceneObject(kind),
   }
 
   beginPlugin(plugin: EnginePlugin): void {
@@ -52,6 +58,7 @@ export class Registry {
       categories: new Map(this.categories),
       dataTypes: new Map(this.dataTypes),
       nodeTypes: new Map(this.nodeTypes),
+      sceneObjects: new Map(this.sceneObjects),
       owners: new Map(this.owners),
     }
   }
@@ -72,6 +79,7 @@ export class Registry {
       this.categories = this.snapshot.categories
       this.dataTypes = this.snapshot.dataTypes
       this.nodeTypes = this.snapshot.nodeTypes
+      this.sceneObjects = this.snapshot.sceneObjects
       this.owners = this.snapshot.owners
     }
     this.currentPlugin = null
@@ -139,6 +147,41 @@ export class Registry {
     this.owners.set(nodeType.id, this.currentPlugin!)
   }
 
+  registerSceneObject(kind: SceneObjectKind): void {
+    this.assertPlugin()
+    if (!NODE_TYPE_ID.test(kind.id)) {
+      throw new EngineError(`Идентификатор объекта «${kind.id}» должен быть вроде core.shape`)
+    }
+    if (this.sceneObjects.has(kind.id)) {
+      throw new EngineError(`Объект «${kind.id}» уже зарегистрирован`)
+    }
+    if (!kind.title.trim()) throw new EngineError('У объекта сцены пустое название')
+    if (!(kind.defaultWidth > 0) || !(kind.defaultHeight > 0) || !Number.isFinite(kind.defaultWidth) || !Number.isFinite(kind.defaultHeight)) {
+      throw new EngineError(`У объекта «${kind.id}» размер по умолчанию должен быть больше нуля`)
+    }
+    const fields = kind.fields.map((field) => this.copySceneField(kind.id, field))
+    const seen = new Set<string>()
+    for (const field of fields) {
+      if (seen.has(field.id)) throw new EngineError(`У объекта «${kind.id}» повторяется поле «${field.id}»`)
+      seen.add(field.id)
+    }
+    const defaultProps: Record<string, SceneValue> = {}
+    for (const [key, value] of Object.entries(kind.defaultProps)) {
+      if (!isSceneValue(value)) throw new EngineError(`Свойство «${key}» объекта «${kind.id}» не поддерживается`)
+      defaultProps[key] = value
+    }
+    this.sceneObjects.set(kind.id, {
+      id: kind.id,
+      title: kind.title,
+      description: kind.description,
+      defaultWidth: kind.defaultWidth,
+      defaultHeight: kind.defaultHeight,
+      defaultProps,
+      fields,
+    })
+    this.owners.set(kind.id, this.currentPlugin!)
+  }
+
   getCategory(id: string): CategoryDefinition | undefined {
     return this.categories.get(id)
   }
@@ -153,6 +196,14 @@ export class Registry {
 
   getNodeOwner(typeId: string): string | undefined {
     return this.owners.get(typeId)
+  }
+
+  getSceneObject(id: string): SceneObjectKind | undefined {
+    return this.sceneObjects.get(id)
+  }
+
+  getSceneOwner(kindId: string): string | undefined {
+    return this.owners.get(kindId)
   }
 
   requireDataType(id: string): DataTypeDefinition {
@@ -176,6 +227,10 @@ export class Registry {
       if (byCategory !== 0) return byCategory
       return left.title.localeCompare(right.title, 'ru')
     })
+  }
+
+  listSceneObjects(): SceneObjectKind[] {
+    return [...this.sceneObjects.values()].sort((left, right) => left.title.localeCompare(right.title, 'ru'))
   }
 
   listPlugins(): PluginInfo[] {
@@ -269,4 +324,24 @@ export class Registry {
       defaultValue: { type: property.defaultValue.type, data: structuredClone(property.defaultValue.data) },
     }
   }
+
+  private copySceneField(kindId: string, field: SceneField): SceneField {
+    if (!PORT_ID.test(field.id)) {
+      throw new EngineError(`Поле «${field.id}» объекта «${kindId}» имеет недопустимый идентификатор`)
+    }
+    if (!field.label.trim()) throw new EngineError(`У поля «${field.id}» объекта «${kindId}» пустая подпись`)
+    if (field.kind === 'select' && (!field.options || field.options.length === 0)) {
+      throw new EngineError(`Поле «${field.id}» объекта «${kindId}» должно перечислить варианты`)
+    }
+    return {
+      id: field.id,
+      label: field.label,
+      kind: field.kind,
+      options: field.options?.map((option) => ({ ...option })),
+    }
+  }
+}
+
+function isSceneValue(value: unknown): value is SceneValue {
+  return value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))
 }

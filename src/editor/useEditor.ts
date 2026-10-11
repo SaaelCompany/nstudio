@@ -1,33 +1,47 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  activeScene,
   addNode,
+  addObjectType,
   addVariable,
   connectNodes,
   createNode,
   disconnectPort,
+  duplicateInstances,
   Engine,
+  placeInstance,
   removeEdges,
+  removeInstances,
   removeNodes,
   removeVariable,
   setDocumentName,
   setNodeInput,
   setNodeProperty,
+  updateInstances,
   updateVariable,
 } from '../core'
-import type { Diagnostic, GraphDocument, LogEntry, RunResult, Value, VariableSnapshot } from '../core'
+import type { Diagnostic, GraphDocument, LogEntry, RunResult, SceneValue, Value, VariableSnapshot } from '../core'
 import { notePlugin } from '../example-plugin'
 import type { Viewport } from './geometry'
 
 const DOCUMENT_KEY = 'nstudio.document.v1'
 const VIEWPORT_KEY = 'nstudio.viewport.v1'
+const SCENE_VIEWPORT_KEY = 'nstudio.sceneViewport.v1'
+
+export type EditorMode = 'scene' | 'nodes'
 
 export interface EditorState {
   document: GraphDocument
   past: GraphDocument[]
   future: GraphDocument[]
   viewport: Viewport
+  sceneViewport: Viewport
+  mode: EditorMode
   selectedNodeIds: string[]
   selectedEdgeIds: string[]
+  selectedInstanceIds: string[]
+  gridEnabled: boolean
+  gridSize: number
   logs: LogEntry[]
   diagnostics: Diagnostic[]
   variables: VariableSnapshot[]
@@ -47,9 +61,9 @@ function loadDocument(engine: Engine): GraphDocument {
   return engine.createDemoDocument()
 }
 
-function loadViewport(): Viewport {
+function loadViewport(key: string): Viewport {
   try {
-    const raw = localStorage.getItem(VIEWPORT_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return { x: 48, y: 40, zoom: 1 }
     const parsed = JSON.parse(raw) as Partial<Viewport>
     if (typeof parsed.x === 'number' && typeof parsed.y === 'number' && typeof parsed.zoom === 'number') {
@@ -76,9 +90,14 @@ export function useEditor() {
     document: loadDocument(engine),
     past: [],
     future: [],
-    viewport: loadViewport(),
+    viewport: loadViewport(VIEWPORT_KEY),
+    sceneViewport: loadViewport(SCENE_VIEWPORT_KEY),
+    mode: 'scene',
     selectedNodeIds: [],
     selectedEdgeIds: [],
+    selectedInstanceIds: [],
+    gridEnabled: true,
+    gridSize: 32,
     logs: [],
     diagnostics: [],
     variables: [],
@@ -101,6 +120,10 @@ export function useEditor() {
     localStorage.setItem(VIEWPORT_KEY, JSON.stringify(state.viewport))
   }, [state.viewport])
 
+  useEffect(() => {
+    localStorage.setItem(SCENE_VIEWPORT_KEY, JSON.stringify(state.sceneViewport))
+  }, [state.sceneViewport])
+
   const reset = useCallback((document: GraphDocument) => {
     editOrigin.current = null
     dragOrigin.current = null
@@ -111,6 +134,7 @@ export function useEditor() {
       future: [],
       selectedNodeIds: [],
       selectedEdgeIds: [],
+      selectedInstanceIds: [],
       logs: [],
       diagnostics: [],
       variables: [],
@@ -131,6 +155,7 @@ export function useEditor() {
         document: previous,
         selectedNodeIds: [],
         selectedEdgeIds: [],
+        selectedInstanceIds: [],
       }
     })
   }, [])
@@ -146,6 +171,7 @@ export function useEditor() {
         document: next,
         selectedNodeIds: [],
         selectedEdgeIds: [],
+        selectedInstanceIds: [],
       }
     })
   }, [])
@@ -154,8 +180,16 @@ export function useEditor() {
     setState((current) => ({ ...current, viewport }))
   }, [])
 
+  const setSceneViewport = useCallback((sceneViewport: Viewport) => {
+    setState((current) => ({ ...current, sceneViewport }))
+  }, [])
+
   const select = useCallback((selectedNodeIds: string[], selectedEdgeIds: string[]) => {
     setState((current) => ({ ...current, selectedNodeIds, selectedEdgeIds }))
+  }, [])
+
+  const selectInstances = useCallback((selectedInstanceIds: string[]) => {
+    setState((current) => ({ ...current, selectedInstanceIds }))
   }, [])
 
   const previewDocument = useCallback((document: GraphDocument) => {
@@ -271,6 +305,18 @@ export function useEditor() {
 
   const deleteSelection = useCallback(() => {
     setState((current) => {
+      if (current.mode === 'scene') {
+        if (current.selectedInstanceIds.length === 0) return current
+        const scene = activeScene(current.document)
+        return {
+          ...current,
+          past: [...current.past, current.document].slice(-100),
+          future: [],
+          document: removeInstances(current.document, scene.id, current.selectedInstanceIds),
+          selectedInstanceIds: [],
+          notice: null,
+        }
+      }
       if (current.selectedNodeIds.length === 0 && current.selectedEdgeIds.length === 0) return current
       const withoutNodes = removeNodes(current.document, current.selectedNodeIds)
       const next = removeEdges(withoutNodes, current.selectedEdgeIds)
@@ -285,6 +331,95 @@ export function useEditor() {
       }
     })
   }, [])
+
+  const duplicateInstancesSelection = useCallback(() => {
+    setState((current) => {
+      if (current.mode !== 'scene' || current.selectedInstanceIds.length === 0) return current
+      try {
+        const scene = activeScene(current.document)
+        const duplicated = duplicateInstances(current.document, scene.id, current.selectedInstanceIds)
+        if (duplicated.instanceIds.length === 0) return current
+        return {
+          ...current,
+          past: [...current.past, current.document].slice(-100),
+          future: [],
+          document: duplicated.document,
+          selectedInstanceIds: duplicated.instanceIds,
+          notice: null,
+        }
+      } catch (error) {
+        return { ...current, notice: messageOf(error) }
+      }
+    })
+  }, [])
+
+  const nudgeInstances = useCallback((dx: number, dy: number) => {
+    setState((current) => {
+      if (current.selectedInstanceIds.length === 0) return current
+      try {
+        const scene = activeScene(current.document)
+        const locked = new Set(scene.layers.filter((layer) => layer.locked).map((layer) => layer.id))
+        const movable = new Set(
+          scene.instances
+            .filter((instance) => current.selectedInstanceIds.includes(instance.id) && !locked.has(instance.layerId))
+            .map((instance) => instance.id),
+        )
+        if (movable.size === 0) return current
+        const next = updateInstances(current.document, scene.id, (instance) =>
+          movable.has(instance.id) ? { x: instance.x + dx, y: instance.y + dy } : null,
+        )
+        if (JSON.stringify(next) === JSON.stringify(current.document)) return current
+        return {
+          ...current,
+          past: [...current.past, current.document].slice(-100),
+          future: [],
+          document: next,
+          notice: null,
+        }
+      } catch (error) {
+        return { ...current, notice: messageOf(error) }
+      }
+    })
+  }, [])
+
+  const placeType = useCallback(
+    (typeId: string, x: number, y: number) => {
+      setState((current) => {
+        try {
+          const type = current.document.scenes.objectTypes.find((item) => item.id === typeId)
+          const kind = type ? engine.registry.getSceneObject(type.kind) : undefined
+          const placed = placeInstance(current.document, typeId, x, y, {
+            width: kind?.defaultWidth,
+            height: kind?.defaultHeight,
+          })
+          return finishPlace(current, placed.document, placed.instanceId)
+        } catch (error) {
+          return { ...current, notice: messageOf(error) }
+        }
+      })
+    },
+    [engine],
+  )
+
+  const createFromKind = useCallback(
+    (kindId: string, x: number, y: number, defaults?: Record<string, SceneValue>) => {
+      setState((current) => {
+        try {
+          const kind = engine.registry.getSceneObject(kindId)
+          if (!kind) return { ...current, notice: `Объект «${kindId}» не зарегистрирован` }
+          const added = addObjectType(current.document, kind, undefined, defaults)
+          const placed = placeInstance(added.document, added.typeId, x, y, {
+            width: kind.defaultWidth,
+            height: kind.defaultHeight,
+          })
+          return finishPlace(current, placed.document, placed.instanceId)
+        } catch (error) {
+          return { ...current, notice: messageOf(error) }
+        }
+      })
+    },
+    [engine],
+  )
 
   const run = useCallback(() => {
     const current = stateRef.current
@@ -362,6 +497,20 @@ export function useEditor() {
         return
       }
       if (typing) return
+      const current = stateRef.current
+      if (current.mode === 'scene' && meta && event.key.toLowerCase() === 'd') {
+        event.preventDefault()
+        duplicateInstancesSelection()
+        return
+      }
+      if (current.mode === 'scene' && (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault()
+        const step = event.shiftKey ? current.gridSize : 1
+        const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+        const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+        nudgeInstances(dx, dy)
+        return
+      }
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
         deleteSelection()
@@ -369,7 +518,7 @@ export function useEditor() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deleteSelection, redo, run, save, undo])
+  }, [deleteSelection, duplicateInstancesSelection, nudgeInstances, redo, run, save, undo])
 
   const events = uniqueEvents(state.document, engine)
 
@@ -379,10 +528,18 @@ export function useEditor() {
     events,
     exampleLoaded: engine.listPlugins().some((plugin) => plugin.id === notePlugin.id),
     setViewport,
+    setSceneViewport,
+    setMode: (mode: EditorMode) => setState((current) => ({ ...current, mode })),
+    setGridEnabled: (gridEnabled: boolean) => setState((current) => ({ ...current, gridEnabled })),
     select,
+    selectInstances,
     previewDocument,
     commitDrag,
     endEdit,
+    editDocument: changeField,
+    notify: (notice: string | null) => setState((current) => ({ ...current, notice })),
+    placeType,
+    createFromKind,
     undo,
     redo,
     addNodeAt,
@@ -406,6 +563,19 @@ export function useEditor() {
     loadExamplePlugin,
     save,
     openText,
+  }
+}
+
+function finishPlace(current: EditorState, document: GraphDocument, instanceId: string): EditorState {
+  const scene = activeScene(document)
+  const layer = scene.layers.find((item) => item.id === document.scenes.activeLayerId)
+  return {
+    ...current,
+    past: [...current.past, current.document].slice(-100),
+    future: [],
+    document,
+    selectedInstanceIds: [instanceId],
+    notice: layer && !layer.visible ? 'Объект создан на скрытом слое' : null,
   }
 }
 

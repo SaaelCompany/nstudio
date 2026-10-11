@@ -12,8 +12,8 @@ export interface Viewport {
 export const MIN_ZOOM = 0.25
 export const MAX_ZOOM = 2.25
 
-export function clampZoom(zoom: number): number {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+export function clampZoom(zoom: number, min = MIN_ZOOM, max = MAX_ZOOM): number {
+  return Math.min(max, Math.max(min, zoom))
 }
 
 export function screenToWorld(point: Point, viewport: Viewport): Point {
@@ -23,8 +23,8 @@ export function screenToWorld(point: Point, viewport: Viewport): Point {
   }
 }
 
-export function zoomAt(viewport: Viewport, focal: Point, nextZoom: number): Viewport {
-  const zoom = clampZoom(nextZoom)
+export function zoomAt(viewport: Viewport, focal: Point, nextZoom: number, min = MIN_ZOOM, max = MAX_ZOOM): Viewport {
+  const zoom = clampZoom(nextZoom, min, max)
   const world = screenToWorld(focal, viewport)
   return {
     zoom,
@@ -46,6 +46,16 @@ export function frameNodes(nodes: { x: number; y: number }[], width: number, hei
     zoom,
     x: (width - boundsWidth * zoom) / 2 - minX * zoom,
     y: (height - boundsHeight * zoom) / 2 - minY * zoom,
+  }
+}
+
+export function frameLayout(width: number, height: number, viewWidth: number, viewHeight: number): Viewport {
+  if (viewWidth <= 0 || viewHeight <= 0) return { x: 48, y: 40, zoom: 1 }
+  const zoom = clampZoom(Math.min((viewWidth - 96) / width, (viewHeight - 96) / height, 1), 0.1, 4)
+  return {
+    zoom,
+    x: (viewWidth - width * zoom) / 2,
+    y: (viewHeight - height * zoom) / 2,
   }
 }
 

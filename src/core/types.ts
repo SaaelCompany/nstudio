@@ -95,10 +95,76 @@ export interface PluginInfo {
   description?: string
 }
 
+export type SceneValue = string | number | boolean | null
+
+export interface SceneField {
+  id: string
+  label: string
+  kind: 'text' | 'number' | 'color' | 'select'
+  options?: PropertyOption[]
+}
+
+/** A placeable object kind contributed by a plugin. Instances copy its defaults. */
+export interface SceneObjectKind {
+  id: string
+  title: string
+  description: string
+  defaultWidth: number
+  defaultHeight: number
+  defaultProps: Record<string, SceneValue>
+  fields: SceneField[]
+}
+
+export interface SceneObjectType {
+  id: string
+  name: string
+  kind: string
+  defaults: Record<string, SceneValue>
+}
+
+export interface SceneLayer {
+  id: string
+  name: string
+  visible: boolean
+  locked: boolean
+}
+
+export interface SceneInstance {
+  id: string
+  typeId: string
+  layerId: string
+  name: string
+  x: number
+  y: number
+  width: number
+  height: number
+  angle: number
+  opacity: number
+  props: Record<string, SceneValue>
+}
+
+export interface Scene {
+  id: string
+  name: string
+  width: number
+  height: number
+  background: string
+  layers: SceneLayer[]
+  instances: SceneInstance[]
+}
+
+export interface SceneProject {
+  activeSceneId: string
+  activeLayerId: string
+  objectTypes: SceneObjectType[]
+  scenes: Scene[]
+}
+
 export interface PluginApi {
   registerCategory(category: CategoryDefinition): void
   registerDataType(dataType: DataTypeDefinition): void
   registerNodeType(nodeType: NodeTypeDefinition): void
+  registerSceneObject(kind: SceneObjectKind): void
 }
 
 export interface GraphNode {
@@ -137,6 +203,8 @@ export interface GraphDocument {
   variables: GraphVariable[]
   /** Opaque plugin storage keyed by plugin id. */
   extensions: Record<string, unknown>
+  /** Layouts shown in the scene editor. */
+  scenes: SceneProject
 }
 
 export interface Diagnostic {

@@ -300,5 +300,60 @@ export const corePlugin = definePlugin({
         ctx.trigger('then')
       },
     })
+
+    api.registerSceneObject({
+      id: 'core.shape',
+      title: 'Фигура',
+      description: 'Прямоугольник или эллипс с заливкой.',
+      defaultWidth: 160,
+      defaultHeight: 96,
+      defaultProps: { shape: 'rect', fill: '#e2a23a' },
+      fields: [
+        {
+          id: 'shape',
+          label: 'Форма',
+          kind: 'select',
+          options: [
+            { value: 'rect', label: 'Прямоугольник' },
+            { value: 'ellipse', label: 'Эллипс' },
+          ],
+        },
+        { id: 'fill', label: 'Заливка', kind: 'color' },
+      ],
+    })
+
+    api.registerSceneObject({
+      id: 'core.text',
+      title: 'Текст',
+      description: 'Надпись на макете.',
+      defaultWidth: 280,
+      defaultHeight: 72,
+      defaultProps: { text: 'Текст', color: '#f4f0e8', size: 36, align: 'center' },
+      fields: [
+        { id: 'text', label: 'Текст', kind: 'text' },
+        { id: 'size', label: 'Размер', kind: 'number' },
+        { id: 'color', label: 'Цвет', kind: 'color' },
+        {
+          id: 'align',
+          label: 'Выравнивание',
+          kind: 'select',
+          options: [
+            { value: 'left', label: 'Слева' },
+            { value: 'center', label: 'По центру' },
+            { value: 'right', label: 'Справа' },
+          ],
+        },
+      ],
+    })
+
+    api.registerSceneObject({
+      id: 'core.sprite',
+      title: 'Спрайт',
+      description: 'Картинка. Файл хранится в проекте.',
+      defaultWidth: 128,
+      defaultHeight: 128,
+      defaultProps: { src: '' },
+      fields: [],
+    })
   },
 })

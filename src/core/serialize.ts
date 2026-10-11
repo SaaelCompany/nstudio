@@ -1,5 +1,6 @@
 import { DOCUMENT_VERSION } from './document'
 import { EngineError } from './errors'
+import { parseSceneProject } from './scene'
 import type { GraphDocument, GraphEdge, GraphNode, GraphVariable, Value } from './types'
 
 export function serializeDocument(document: GraphDocument): string {
@@ -33,6 +34,7 @@ export function deserializeDocument(raw: string): GraphDocument {
     edges,
     variables,
     extensions: parseExtensions(parsed.extensions),
+    scenes: parseSceneProject(parsed.scenes),
   }
 }
 

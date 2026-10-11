@@ -1,6 +1,7 @@
 import { EngineError } from './errors'
 import { createId } from './ids'
 import type { Registry } from './registry'
+import { createBlankSceneProject } from './scene'
 import type { Diagnostic, GraphDocument, GraphEdge, GraphNode, GraphVariable, ResolvedPort, Value } from './types'
 import { areTypesCompatible, cloneValue } from './values'
 
@@ -15,6 +16,7 @@ export function createDocument(name = 'Без названия'): GraphDocument 
     edges: [],
     variables: [],
     extensions: {},
+    scenes: createBlankSceneProject(),
   }
 }
 

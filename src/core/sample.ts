@@ -1,5 +1,6 @@
 import { addNode, connectNodes, createDocument, createNode, setNodeProperty } from './document'
 import type { Registry } from './registry'
+import { createDemoSceneProject } from './scene'
 import type { GraphDocument } from './types'
 import { numberValue, stringValue } from './values'
 
@@ -38,6 +39,7 @@ export function createDemoDocument(registry: Registry): GraphDocument {
   link('two', 'value', 'sum', 'a')
   link('forty', 'value', 'sum', 'b')
   link('sum', 'result', 'print_sum', 'value')
+  document = { ...document, scenes: createDemoSceneProject() }
 
   return document
 }
