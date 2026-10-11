@@ -187,38 +187,40 @@ export function SceneSidebar({ editor }: { editor: EditorController }) {
               <button type="button" className="grow" onClick={() => editor.editDocument((document) => setActiveLayer(document, layer.id), 'commit')}>
                 {layer.name}
               </button>
-              <button
-                type="button"
-                aria-label={layer.visible ? 'Скрыть слой' : 'Показать слой'}
-                aria-pressed={layer.visible}
-                onClick={() => editor.editDocument((document) => patchLayer(document, scene.id, layer.id, { visible: !layer.visible }), 'commit')}
-              >
-                {layer.visible ? 'Виден' : 'Скрыт'}
-              </button>
-              <button
-                type="button"
-                aria-label={layer.locked ? 'Разблокировать слой' : 'Заблокировать слой'}
-                aria-pressed={layer.locked}
-                onClick={() => editor.editDocument((document) => patchLayer(document, scene.id, layer.id, { locked: !layer.locked }), 'commit')}
-              >
-                {layer.locked ? 'Закрыт' : 'Открыт'}
-              </button>
-              <button type="button" aria-label="Выше" onClick={() => editor.editDocument((document) => moveLayer(document, scene.id, layer.id, 1), 'commit')}>
-                Выше
-              </button>
-              <button type="button" aria-label="Ниже" onClick={() => editor.editDocument((document) => moveLayer(document, scene.id, layer.id, -1), 'commit')}>
-                Ниже
-              </button>
-              {scene.layers.length > 1 ? (
+              <div className="layer-actions">
                 <button
                   type="button"
-                  className="danger"
-                  aria-label={`Удалить слой ${layer.name}`}
-                  onClick={() => editor.editDocument((document) => removeLayer(document, scene.id, layer.id), 'commit')}
+                  aria-label={layer.visible ? 'Скрыть слой' : 'Показать слой'}
+                  aria-pressed={layer.visible}
+                  onClick={() => editor.editDocument((document) => patchLayer(document, scene.id, layer.id, { visible: !layer.visible }), 'commit')}
                 >
-                  Удалить
+                  {layer.visible ? 'Виден' : 'Скрыт'}
                 </button>
-              ) : null}
+                <button
+                  type="button"
+                  aria-label={layer.locked ? 'Разблокировать слой' : 'Заблокировать слой'}
+                  aria-pressed={layer.locked}
+                  onClick={() => editor.editDocument((document) => patchLayer(document, scene.id, layer.id, { locked: !layer.locked }), 'commit')}
+                >
+                  {layer.locked ? 'Закрыт' : 'Открыт'}
+                </button>
+                <button type="button" aria-label="Выше" onClick={() => editor.editDocument((document) => moveLayer(document, scene.id, layer.id, 1), 'commit')}>
+                  Выше
+                </button>
+                <button type="button" aria-label="Ниже" onClick={() => editor.editDocument((document) => moveLayer(document, scene.id, layer.id, -1), 'commit')}>
+                  Ниже
+                </button>
+                {scene.layers.length > 1 ? (
+                  <button
+                    type="button"
+                    className="danger"
+                    aria-label={`Удалить слой ${layer.name}`}
+                    onClick={() => editor.editDocument((document) => removeLayer(document, scene.id, layer.id), 'commit')}
+                  >
+                    Удалить
+                  </button>
+                ) : null}
+              </div>
             </div>
           ))}
         </section>

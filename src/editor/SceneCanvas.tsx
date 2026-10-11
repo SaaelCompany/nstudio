@@ -356,12 +356,12 @@ export function SceneCanvas(props: SceneCanvasProps) {
                       instance={instance}
                       type={props.document.scenes.objectTypes.find((item) => item.id === instance.typeId)}
                       selected={props.selectedIds.includes(instance.id)}
-                      single={props.selectedIds.length === 1}
                       locked={layer.locked}
                     />
                   ))
               : null,
           )}
+          <SelectionHandles scene={scene} selectedIds={props.selectedIds} zoom={props.viewport.zoom} />
         </div>
       </div>
       {marquee ? (
@@ -397,16 +397,13 @@ function SceneObject({
   instance,
   type,
   selected,
-  single,
   locked,
 }: {
   instance: SceneInstance
   type: SceneObjectType | undefined
   selected: boolean
-  single: boolean
   locked: boolean
 }) {
-  const showHandles = selected && single && !locked
   return (
     <div
       className={`scene-instance${selected ? ' selected' : ''}${locked ? ' locked' : ''}`}
@@ -424,14 +421,33 @@ function SceneObject({
       <div className="scene-body" style={{ opacity: instance.opacity }}>
         <InstanceBody instance={instance} type={type} />
       </div>
-      {showHandles ? (
-        <>
-          {HANDLES.map((handle) => (
-            <span key={handle} className={`handle handle-${handle}`} data-handle={handle} />
-          ))}
-          <span className="handle handle-rotate" data-handle="rotate" />
-        </>
-      ) : null}
+    </div>
+  )
+}
+
+function SelectionHandles({ scene, selectedIds, zoom }: { scene: ReturnType<typeof activeScene>; selectedIds: string[]; zoom: number }) {
+  if (selectedIds.length !== 1) return null
+  const instance = scene.instances.find((item) => item.id === selectedIds[0])
+  if (!instance) return null
+  const layer = scene.layers.find((item) => item.id === instance.layerId)
+  if (!layer?.visible || layer.locked) return null
+  const size = 14 / Math.max(zoom, SCENE_ZOOM_MIN)
+  return (
+    <div
+      className="scene-handles"
+      data-instance-id={instance.id}
+      style={{
+        left: instance.x,
+        top: instance.y,
+        width: instance.width,
+        height: instance.height,
+        transform: `rotate(${instance.angle}deg)`,
+      }}
+    >
+      {HANDLES.map((handle) => (
+        <span key={handle} className={`handle handle-${handle}`} data-handle={handle} style={{ width: size, height: size }} />
+      ))}
+      <span className="handle handle-rotate" data-handle="rotate" style={{ width: size, height: size }} />
     </div>
   )
 }
