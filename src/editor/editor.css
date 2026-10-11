@@ -752,10 +752,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     border-right: 0;
   }
   .palette, .inspector, .scene-dock, .console { border-top: 1px solid var(--line); }
-  .workspace.scene-mode { grid-template-rows: 280px 68vh auto; }
-  .workspace.scene-mode .inspector { grid-row: 1; }
-  .workspace.scene-mode .center-column { grid-row: 2; min-height: 68vh; }
-  .workspace.scene-mode .scene-dock { grid-row: 3; height: auto; }
+  .workspace.scene-mode { grid-template-rows: auto 70vh auto; }
+  .workspace.scene-mode .inspector { grid-row: 1; min-height: auto; overflow: visible; }
+  .workspace.scene-mode .center-column { grid-row: 2; min-height: 70vh; }
+  .workspace.scene-mode .scene-dock { grid-row: 3; height: auto; min-height: auto; }
   .layers-panel { height: 220px; }
   .toolbar { flex-wrap: wrap; height: auto; padding: 8px; }
   .toolbar-actions { margin-left: 0; flex-wrap: wrap; }
