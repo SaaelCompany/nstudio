@@ -431,7 +431,7 @@ function SelectionHandles({ scene, selectedIds, zoom }: { scene: ReturnType<type
   if (!instance) return null
   const layer = scene.layers.find((item) => item.id === instance.layerId)
   if (!layer?.visible || layer.locked) return null
-  const size = 14 / Math.max(zoom, SCENE_ZOOM_MIN)
+  const size = 22 / Math.max(zoom, SCENE_ZOOM_MIN)
   return (
     <div
       className="scene-handles"

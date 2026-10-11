@@ -501,7 +501,17 @@ textarea { resize: vertical; }
   border-radius: 50%;
   cursor: grab;
   transform: translate(-50%, -100%);
-  margin-top: calc(-18px / var(--scene-zoom, 1));
+  margin-top: calc(-20px / var(--scene-zoom, 1));
+}
+.handle-rotate::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  height: calc(20px / var(--scene-zoom, 1));
+  background: var(--accent);
+  pointer-events: none;
 }
 
 .marquee {
