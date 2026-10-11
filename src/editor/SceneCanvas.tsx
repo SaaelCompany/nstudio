@@ -200,7 +200,14 @@ export function SceneCanvas(props: SceneCanvasProps) {
       return
     }
     if (current.type === 'resize') {
-      const next = resizeBox(current.box, current.handle, world.x - current.startWorld.x, world.y - current.startWorld.y)
+      const resized = resizeBox(current.box, current.handle, world.x - current.startWorld.x, world.y - current.startWorld.y)
+      const next = {
+        x: round2(resized.x),
+        y: round2(resized.y),
+        width: round2(resized.width),
+        height: round2(resized.height),
+        angle: resized.angle,
+      }
       const sceneId = activeScene(propsRef.current.document).id
       propsRef.current.onPreviewDocument(
         updateInstances(propsRef.current.document, sceneId, (instance) => (instance.id === current.id ? next : null)),
@@ -208,7 +215,7 @@ export function SceneCanvas(props: SceneCanvasProps) {
       return
     }
     if (current.type === 'rotate') {
-      let angle = angleFromPointer(current.box, world.x, world.y)
+      let angle = round2(angleFromPointer(current.box, world.x, world.y))
       if (event.shiftKey) angle = (Math.round(angle / 15) * 15) % 360
       const sceneId = activeScene(propsRef.current.document).id
       propsRef.current.onPreviewDocument(
@@ -271,7 +278,7 @@ export function SceneCanvas(props: SceneCanvasProps) {
     propsRef.current.onPreviewDocument(
       updateInstances(propsRef.current.document, sceneId, (instance) => {
         const origin = current.origins[instance.id]
-        return origin ? { x: origin.x + dx, y: origin.y + dy } : null
+        return origin ? { x: round2(origin.x + dx), y: round2(origin.y + dy) } : null
       }),
     )
   }
@@ -500,4 +507,8 @@ function distance(from: Point, to: Point): number {
 
 function prefixed(value: string, prefix: string): string {
   return value.startsWith(prefix) ? value.slice(prefix.length) : ''
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
 }
