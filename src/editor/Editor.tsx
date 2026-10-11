@@ -4,9 +4,10 @@ import type { GraphDocument } from '../core'
 import { Canvas } from './Canvas'
 import { Inspector } from './Inspector'
 import { NodeTypeList } from './NodeTypeList'
+import type { Point } from './geometry'
 import { SceneCanvas } from './SceneCanvas'
 import { SceneInspector } from './SceneInspector'
-import { SceneSidebar } from './SceneSidebar'
+import { SceneDock } from './SceneSidebar'
 import { useEditor } from './useEditor'
 
 export function Editor() {
@@ -14,6 +15,7 @@ export function Editor() {
   const { state, engine } = editor
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(state.document.name)
+  const [pointer, setPointer] = useState<Point | null>(null)
   useEffect(() => setName(state.document.name), [state.document.name])
 
   const addAtCenter = (typeId: string) => {
@@ -38,14 +40,6 @@ export function Editor() {
             <strong>NStudio</strong>
             <small>Макеты и ноды</small>
           </div>
-        </div>
-        <div className="mode-switch" role="group" aria-label="Режим">
-          <button type="button" data-testid="mode-scene" aria-pressed={state.mode === 'scene'} onClick={() => editor.setMode('scene')}>
-            Сцена
-          </button>
-          <button type="button" data-testid="mode-nodes" aria-pressed={state.mode === 'nodes'} onClick={() => editor.setMode('nodes')}>
-            События
-          </button>
         </div>
         <input
           className="name-input interactive"
@@ -104,49 +98,59 @@ export function Editor() {
       </header>
       <div className={`workspace${state.mode === 'scene' ? ' scene-mode' : ''}`}>
         {state.mode === 'scene' ? (
-          <SceneSidebar editor={editor} />
+          <SceneInspector editor={editor} />
         ) : (
           <aside className="palette">
             <div className="panel-label">Ноды</div>
             <NodeTypeList types={engine.registry.listNodeTypes()} categories={engine.registry.listCategories()} onPick={addAtCenter} />
           </aside>
         )}
-        {state.mode === 'scene' ? (
-          <SceneCanvas
-            document={state.document}
-            viewport={state.sceneViewport}
-            selectedIds={state.selectedInstanceIds}
-            gridEnabled={state.gridEnabled}
-            gridSize={state.gridSize}
-            onViewport={editor.setSceneViewport}
-            onSelect={editor.selectInstances}
-            onPreviewDocument={editor.previewDocument}
-            onCommitDrag={editor.commitDrag}
-            onPlaceType={editor.placeType}
-            onPlaceKind={editor.createFromKind}
-            onToggleGrid={() => editor.setGridEnabled(!state.gridEnabled)}
-            onNotice={editor.notify}
-          />
-        ) : (
-          <Canvas
-            engine={engine}
-            document={state.document}
-            viewport={state.viewport}
-            selectedNodeIds={state.selectedNodeIds}
-            selectedEdgeIds={state.selectedEdgeIds}
-            onViewport={editor.setViewport}
-            onSelect={editor.select}
-            onPreviewDocument={editor.previewDocument}
-            onCommitDrag={editor.commitDrag}
-            onConnect={editor.connect}
-            onDisconnect={editor.disconnect}
-            onAddNode={editor.addNodeAt}
-            onDeleteSelection={editor.deleteSelection}
-            onChangeProperty={editor.changeProperty}
-            onChangeInput={editor.changeInput}
-            onEditEnd={editor.endEdit}
-          />
-        )}
+        <div className="center-column">
+          <div className="sheet-tabs" role="tablist" aria-label="Листы">
+            <button type="button" role="tab" data-testid="mode-scene" aria-selected={state.mode === 'scene'} onClick={() => editor.setMode('scene')}>
+              Макет
+            </button>
+            <button type="button" role="tab" data-testid="mode-nodes" aria-selected={state.mode === 'nodes'} onClick={() => editor.setMode('nodes')}>
+              События
+            </button>
+          </div>
+          {state.mode === 'scene' ? (
+            <SceneCanvas
+              document={state.document}
+              viewport={state.sceneViewport}
+              selectedIds={state.selectedInstanceIds}
+              gridEnabled={state.gridEnabled}
+              snapEnabled={state.snapEnabled}
+              gridSize={state.gridSize}
+              onViewport={editor.setSceneViewport}
+              onHover={setPointer}
+              onSelect={editor.selectInstances}
+              onPreviewDocument={editor.previewDocument}
+              onCommitDrag={editor.commitDrag}
+              onPlaceType={editor.placeType}
+              onPlaceKind={editor.createFromKind}
+              onNotice={editor.notify}
+            />
+          ) : (
+            <Canvas
+              engine={engine}
+              document={state.document}
+              viewport={state.viewport}
+              selectedNodeIds={state.selectedNodeIds}
+              selectedEdgeIds={state.selectedEdgeIds}
+              onViewport={editor.setViewport}
+              onSelect={editor.select}
+              onPreviewDocument={editor.previewDocument}
+              onCommitDrag={editor.commitDrag}
+              onConnect={editor.connect}
+              onDisconnect={editor.disconnect}
+              onAddNode={editor.addNodeAt}
+              onDeleteSelection={editor.deleteSelection}
+              onChangeProperty={editor.changeProperty}
+              onChangeInput={editor.changeInput}
+              onEditEnd={editor.endEdit}
+            />
+          )}
         <section className="console" data-testid="console">
           <header>
             <h2>Консоль</h2>
@@ -182,30 +186,24 @@ export function Editor() {
             ) : null}
           </div>
         </section>
-        {state.mode === 'scene' ? <SceneInspector editor={editor} /> : <Inspector editor={editor} />}
+        </div>
+        {state.mode === 'scene' ? <SceneDock editor={editor} /> : <Inspector editor={editor} />}
       </div>
       <footer className="status">
-        <span>{state.mode === 'scene' ? sceneStatus(state.document, state.sceneViewport.zoom, state.gridEnabled, state.gridSize) : nodeStatus(state)}</span>
+        <span>{state.mode === 'scene' ? sceneStatus(state.document, state.sceneViewport.zoom, pointer) : nodeStatus(state)}</span>
         <span className={state.notice ? 'notice' : 'muted'}>{state.notice ?? 'Готово'}</span>
       </footer>
     </div>
   )
 }
 
-function sceneStatus(document: GraphDocument, zoom: number, grid: boolean, gridSize: number): string {
+function sceneStatus(document: GraphDocument, zoom: number, pointer: Point | null): string {
   const scene = activeScene(document)
-  const gridLabel = grid ? ` · сетка ${gridSize}` : ''
-  return `${scene.name} · ${scene.width}×${scene.height} · ${countObjects(scene.instances.length)} · ${Math.round(zoom * 100)}%${gridLabel}`
+  const layer = scene.layers.find((item) => item.id === document.scenes.activeLayerId)
+  const mouse = pointer ? `${Math.round(pointer.x)}, ${Math.round(pointer.y)}` : '—'
+  return `Мышь (${mouse}) · ${layer?.name ?? 'Слой'} · ${Math.round(zoom * 100)}%`
 }
 
 function nodeStatus(state: { document: { nodes: unknown[]; edges: unknown[] }; viewport: { zoom: number } }): string {
   return `${state.document.nodes.length} нод · ${state.document.edges.length} связей · ${Math.round(state.viewport.zoom * 100)}%`
-}
-
-function countObjects(count: number): string {
-  const mod10 = count % 10
-  const mod100 = count % 100
-  if (mod10 === 1 && mod100 !== 11) return `${count} объект`
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} объекта`
-  return `${count} объектов`
 }

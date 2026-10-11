@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { activeScene, patchInstances, sendInstance, setSceneCanvas } from '../core'
+import { activeScene, patchInstances, renameScene, sendInstance, setSceneCanvas } from '../core'
 import type { SceneInstance, SceneValue } from '../core'
 import { readImageFile } from './images'
 import type { useEditor } from './useEditor'
@@ -20,7 +20,7 @@ export function SceneInspector({ editor }: { editor: EditorController }) {
   }
 
   return (
-    <aside className="inspector">
+    <aside className="inspector scene-properties">
       <div className="panel-label">Свойства</div>
       <div className="inspector-body">
         {selected.length > 1 ? (
@@ -33,7 +33,7 @@ export function SceneInspector({ editor }: { editor: EditorController }) {
         ) : null}
         {instance ? (
           <>
-            <h2>{instance.name}</h2>
+            <h3 className="prop-section">Объект</h3>
             <p>{kind?.description ?? (objectType ? `Вид «${objectType.kind}» не подключён.` : 'Тип объекта удалён.')}</p>
             <label className="field">
               <span>Имя</span>
@@ -94,8 +94,20 @@ export function SceneInspector({ editor }: { editor: EditorController }) {
         ) : null}
         {selected.length === 0 ? (
           <>
-            <h2>{scene.name}</h2>
-            <p>Размер макета и фон. Объекты можно вынести за край.</p>
+            <h3 className="prop-section">Макет</h3>
+            <label className="field">
+              <span>Имя</span>
+              <input
+                className="interactive"
+                aria-label="Название макета"
+                defaultValue={scene.name}
+                key={scene.name}
+                onBlur={(event) => {
+                  const next = event.target.value.trim()
+                  if (next && next !== scene.name) editor.editDocument((document) => renameScene(document, scene.id, next), 'commit')
+                }}
+              />
+            </label>
             <div className="field-grid">
               <DraftNumber
                 label="Ширина макета"
@@ -121,6 +133,27 @@ export function SceneInspector({ editor }: { editor: EditorController }) {
             </label>
           </>
         ) : null}
+        <h3 className="prop-section">Редактор</h3>
+        <label className="field">
+          <span>Показать сетку</span>
+          <input
+            type="checkbox"
+            data-testid="grid-toggle"
+            aria-label="Показать сетку"
+            checked={state.gridEnabled}
+            onChange={(event) => editor.setGridEnabled(event.target.checked)}
+          />
+        </label>
+        <label className="field">
+          <span>Привязка</span>
+          <input
+            type="checkbox"
+            aria-label="Привязка к сетке"
+            checked={state.snapEnabled}
+            onChange={(event) => editor.setSnapEnabled(event.target.checked)}
+          />
+        </label>
+        <DraftNumber label="Шаг сетки" value={state.gridSize} onPreview={(value) => editor.setGridSize(value)} onEditEnd={() => undefined} />
       </div>
     </aside>
   )

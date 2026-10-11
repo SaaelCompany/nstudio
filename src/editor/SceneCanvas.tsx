@@ -23,14 +23,15 @@ interface SceneCanvasProps {
   viewport: Viewport
   selectedIds: string[]
   gridEnabled: boolean
+  snapEnabled: boolean
   gridSize: number
   onViewport: (viewport: Viewport) => void
+  onHover: (point: Point | null) => void
   onSelect: (ids: string[]) => void
   onPreviewDocument: (document: GraphDocument) => void
   onCommitDrag: () => void
   onPlaceType: (typeId: string, x: number, y: number) => void
   onPlaceKind: (kindId: string, x: number, y: number, defaults?: Record<string, SceneValue>) => void
-  onToggleGrid: () => void
   onNotice: (message: string) => void
 }
 
@@ -159,10 +160,11 @@ export function SceneCanvas(props: SceneCanvasProps) {
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const current = gesture.current
-    if (!current || current.pointerId !== event.pointerId) return
     const screen = localPoint(event)
     const world = screenToWorld(screen, propsRef.current.viewport)
+    propsRef.current.onHover(world)
+    const current = gesture.current
+    if (!current || current.pointerId !== event.pointerId) return
     if (current.type === 'pending-pan') {
       if (distance(current.start, screen) < 4) return
       gesture.current = { type: 'pan', pointerId: current.pointerId, last: screen }
@@ -269,8 +271,8 @@ export function SceneCanvas(props: SceneCanvasProps) {
     if (!primary) return
     let dx = world.x - current.startWorld.x
     let dy = world.y - current.startWorld.y
-    const { gridEnabled, gridSize } = propsRef.current
-    if (gridEnabled && gridSize > 1) {
+    const { snapEnabled, gridSize } = propsRef.current
+    if (snapEnabled && gridSize > 1) {
       dx = snapValue(primary.x + dx, gridSize) - primary.x
       dy = snapValue(primary.y + dy, gridSize) - primary.y
     }
@@ -332,6 +334,7 @@ export function SceneCanvas(props: SceneCanvasProps) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onPointerLeave={() => props.onHover(null)}
       onContextMenu={(event) => event.preventDefault()}
       onDragOver={(event) => {
         event.preventDefault()
@@ -385,9 +388,6 @@ export function SceneCanvas(props: SceneCanvasProps) {
       <div className="zoom-controls">
         <button type="button" onClick={() => zoomBy(1 / 1.1)} aria-label="Уменьшить">
           −
-        </button>
-        <button type="button" data-testid="grid-toggle" aria-pressed={props.gridEnabled} onClick={props.onToggleGrid}>
-          Сетка
         </button>
         <button type="button" onClick={frame}>
           В кадр

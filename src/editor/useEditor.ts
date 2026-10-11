@@ -41,6 +41,7 @@ export interface EditorState {
   selectedEdgeIds: string[]
   selectedInstanceIds: string[]
   gridEnabled: boolean
+  snapEnabled: boolean
   gridSize: number
   logs: LogEntry[]
   diagnostics: Diagnostic[]
@@ -97,6 +98,7 @@ export function useEditor() {
     selectedEdgeIds: [],
     selectedInstanceIds: [],
     gridEnabled: true,
+    snapEnabled: true,
     gridSize: 32,
     logs: [],
     diagnostics: [],
@@ -531,6 +533,9 @@ export function useEditor() {
     setSceneViewport,
     setMode: (mode: EditorMode) => setState((current) => ({ ...current, mode })),
     setGridEnabled: (gridEnabled: boolean) => setState((current) => ({ ...current, gridEnabled })),
+    setSnapEnabled: (snapEnabled: boolean) => setState((current) => ({ ...current, snapEnabled })),
+    setGridSize: (gridSize: number) =>
+      setState((current) => ({ ...current, gridSize: Math.min(256, Math.max(1, Math.round(gridSize))) })),
     select,
     selectInstances,
     previewDocument,
