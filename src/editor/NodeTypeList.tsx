@@ -44,7 +44,6 @@ export function NodeTypeList({ types, categories, autoFocus = false, onPick }: N
                 type="button"
                 className="picker-item"
                 draggable
-                title={nodeType.description}
                 onDragStart={(event) => {
                   dragged.current = true
                   event.dataTransfer.setData('application/x-nstudio-node', nodeType.id)
