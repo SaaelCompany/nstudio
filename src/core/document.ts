@@ -1,7 +1,7 @@
 import { EngineError } from './errors'
 import { createId } from './ids'
 import type { Registry } from './registry'
-import { createBlankSceneProject } from './scene'
+import { createBlankSceneProject, syncActiveSheet } from './scene'
 import type { Diagnostic, GraphDocument, GraphEdge, GraphNode, GraphVariable, ResolvedPort, Value } from './types'
 import { areTypesCompatible, cloneValue } from './values'
 
@@ -46,29 +46,29 @@ export function addNode(document: GraphDocument, node: GraphNode): GraphDocument
   if (document.nodes.some((item) => item.id === node.id)) {
     throw new EngineError(`Нода «${node.id}» уже есть в документе`)
   }
-  return { ...document, nodes: [...document.nodes, node] }
+  return syncActiveSheet({ ...document, nodes: [...document.nodes, node] })
 }
 
 export function moveNodes(
   document: GraphDocument,
   positions: Record<string, { x: number; y: number }>,
 ): GraphDocument {
-  return {
+  return syncActiveSheet({
     ...document,
     nodes: document.nodes.map((node) => {
       const next = positions[node.id]
       return next ? { ...node, x: next.x, y: next.y } : node
     }),
-  }
+  })
 }
 
 export function removeNodes(document: GraphDocument, nodeIds: readonly string[]): GraphDocument {
   const removed = new Set(nodeIds)
-  return {
+  return syncActiveSheet({
     ...document,
     nodes: document.nodes.filter((node) => !removed.has(node.id)),
     edges: document.edges.filter((edge) => !removed.has(edge.sourceNodeId) && !removed.has(edge.targetNodeId)),
-  }
+  })
 }
 
 export function setDocumentName(document: GraphDocument, name: string): GraphDocument {
@@ -171,23 +171,23 @@ export function connectNodes(
     targetNodeId: target.node.id,
     targetPortId: target.id,
   }
-  return { ok: true, document: { ...document, edges: [...edges, edge] } }
+  return { ok: true, document: syncActiveSheet({ ...document, edges: [...edges, edge] }) }
 }
 
 export function removeEdges(document: GraphDocument, edgeIds: readonly string[]): GraphDocument {
   const removed = new Set(edgeIds)
-  return { ...document, edges: document.edges.filter((edge) => !removed.has(edge.id)) }
+  return syncActiveSheet({ ...document, edges: document.edges.filter((edge) => !removed.has(edge.id)) })
 }
 
 export function disconnectPort(document: GraphDocument, nodeId: string, portId: string): GraphDocument {
-  return {
+  return syncActiveSheet({
     ...document,
     edges: document.edges.filter(
       (edge) =>
         !(edge.sourceNodeId === nodeId && edge.sourcePortId === portId) &&
         !(edge.targetNodeId === nodeId && edge.targetPortId === portId),
     ),
-  }
+  })
 }
 
 export function addVariable(
@@ -274,7 +274,7 @@ function mapNode(document: GraphDocument, nodeId: string, mapper: (node: GraphNo
   if (!document.nodes.some((node) => node.id === nodeId)) {
     throw new EngineError(`Нода «${nodeId}» не найдена`)
   }
-  return { ...document, nodes: document.nodes.map((node) => (node.id === nodeId ? mapper(node) : node)) }
+  return syncActiveSheet({ ...document, nodes: document.nodes.map((node) => (node.id === nodeId ? mapper(node) : node)) })
 }
 
 function uniqueName(document: GraphDocument, base: string): string {

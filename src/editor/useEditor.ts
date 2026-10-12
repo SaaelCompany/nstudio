@@ -14,13 +14,15 @@ import {
   removeInstances,
   removeNodes,
   removeVariable,
+  setActiveScene,
   setDocumentName,
   setNodeInput,
   setNodeProperty,
+  syncActiveSheet,
   updateInstances,
   updateVariable,
 } from '../core'
-import type { Diagnostic, GraphDocument, LogEntry, RunResult, SceneValue, Value, VariableSnapshot } from '../core'
+import type { Diagnostic, EnginePlugin, GraphDocument, LogEntry, RunResult, SceneValue, Value, VariableSnapshot } from '../core'
 import { notePlugin } from '../example-plugin'
 import type { Viewport } from './geometry'
 
@@ -197,7 +199,7 @@ export function useEditor() {
   const previewDocument = useCallback((document: GraphDocument) => {
     setState((current) => {
       if (!dragOrigin.current) dragOrigin.current = current.document
-      return { ...current, document }
+      return { ...current, document: syncActiveSheet(document) }
     })
   }, [])
 
@@ -437,18 +439,43 @@ export function useEditor() {
     }))
   }, [engine])
 
+  const connectPlugin = useCallback(
+    (plugin: EnginePlugin) => {
+      try {
+        engine.use(plugin)
+        setState((current) => ({
+          ...current,
+          pluginEpoch: current.pluginEpoch + 1,
+          notice: `Модуль «${plugin.name}» подключён.`,
+        }))
+      } catch (error) {
+        setState((current) => ({ ...current, notice: messageOf(error) }))
+      }
+    },
+    [engine],
+  )
+
+  const openScene = useCallback((sceneId: string) => {
+    setState((current) => {
+      if (current.document.scenes.activeSceneId === sceneId) return current
+      try {
+        return {
+          ...current,
+          document: setActiveScene(current.document, sceneId),
+          selectedNodeIds: [],
+          selectedEdgeIds: [],
+          selectedInstanceIds: [],
+          notice: null,
+        }
+      } catch (error) {
+        return { ...current, notice: messageOf(error) }
+      }
+    })
+  }, [])
+
   const loadExamplePlugin = useCallback(() => {
-    try {
-      engine.use(notePlugin)
-      setState((current) => ({
-        ...current,
-        pluginEpoch: current.pluginEpoch + 1,
-        notice: 'Плагин «Заметки» подключён. Нода появилась в палитре.',
-      }))
-    } catch (error) {
-      setState((current) => ({ ...current, notice: messageOf(error) }))
-    }
-  }, [engine])
+    connectPlugin(notePlugin)
+  }, [connectPlugin])
 
   const save = useCallback(() => {
     const document = stateRef.current.document
@@ -566,6 +593,8 @@ export function useEditor() {
     newDocument: () => reset(engine.createBlankDocument()),
     loadDemo: () => reset(engine.createDemoDocument()),
     loadExamplePlugin,
+    connectPlugin,
+    openScene,
     save,
     openText,
   }

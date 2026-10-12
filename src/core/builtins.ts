@@ -1,5 +1,5 @@
 import { definePlugin } from './plugin'
-import type { NodeTypeDefinition } from './types'
+import type { NodeTypeDefinition, SceneValue } from './types'
 import { asNumber, booleanValue, formatValue, isTruthy, numberValue, stringValue, valuesEqual } from './values'
 
 const numberPort = (id: string, label: string) => ({ id, label, kind: 'data' as const, dataType: 'number' })
@@ -355,5 +355,68 @@ export const corePlugin = definePlugin({
       defaultProps: { src: '' },
       fields: [],
     })
+
+    api.registerEffect({
+      id: 'core.effect.blur',
+      title: 'Размытие',
+      description: 'Размывает объект на макете.',
+      fields: [{ id: 'radius', label: 'Радиус', kind: 'number' }],
+      defaultProps: { radius: 4 },
+      filter: (props) => `blur(${unit(props.radius, 4, 0, 40)}px)`,
+    })
+    api.registerEffect({
+      id: 'core.effect.brightness',
+      title: 'Яркость',
+      description: 'Меняет яркость объекта на макете. 1 — как есть.',
+      fields: [{ id: 'amount', label: 'Яркость', kind: 'number' }],
+      defaultProps: { amount: 1 },
+      filter: (props) => `brightness(${unit(props.amount, 1, 0, 4)})`,
+    })
+    api.registerEffect({
+      id: 'core.effect.grayscale',
+      title: 'Оттенки серого',
+      description: 'Убирает цвет. 0 — без изменений, 1 — серый.',
+      fields: [{ id: 'amount', label: 'Сила', kind: 'number' }],
+      defaultProps: { amount: 1 },
+      filter: (props) => `grayscale(${unit(props.amount, 1, 0, 1)})`,
+    })
+    api.registerEffect({
+      id: 'core.effect.hue',
+      title: 'Оттенок',
+      description: 'Поворачивает оттенок объекта на макете.',
+      fields: [{ id: 'angle', label: 'Угол', kind: 'number' }],
+      defaultProps: { angle: 90 },
+      filter: (props) => `hue-rotate(${unit(props.angle, 90, -360, 360)}deg)`,
+    })
+
+    api.registerBehavior({
+      id: 'core.behavior.bullet',
+      title: 'Пуля',
+      description: 'Хранит скорость и направление. Движение выполняет подключённый модуль, ядро само объекты не двигает.',
+      fields: [
+        { id: 'speed', label: 'Скорость', kind: 'number' },
+        { id: 'angle', label: 'Угол', kind: 'number' },
+      ],
+      defaultProps: { speed: 400, angle: 0 },
+    })
+    api.registerBehavior({
+      id: 'core.behavior.drag',
+      title: 'Перетаскивание',
+      description: 'Помечает тип как перетаскиваемый. Обработку берёт на себя подключённый модуль.',
+      fields: [],
+      defaultProps: {},
+    })
+    api.registerBehavior({
+      id: 'core.behavior.solid',
+      title: 'Твёрдое',
+      description: 'Помечает тип как непроходимый. Столкновения считает подключённый модуль.',
+      fields: [],
+      defaultProps: {},
+    })
   },
 })
+
+function unit(value: SceneValue, fallback: number, min: number, max: number): number {
+  const number = typeof value === 'number' && Number.isFinite(value) ? value : fallback
+  return Math.min(max, Math.max(min, number))
+}

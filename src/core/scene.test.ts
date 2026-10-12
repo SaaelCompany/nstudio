@@ -4,11 +4,17 @@ import {
   Engine,
   EngineError,
   activeScene,
+  addBehavior,
+  addInstanceEffect,
+  addNode,
+  addScene,
   angleFromPointer,
+  createNode,
   patchLayer,
   placeInstance,
   removeScene,
   resizeBox,
+  setActiveScene,
 } from './index'
 
 describe('scene layout', () => {
@@ -100,5 +106,88 @@ describe('scene layout', () => {
     ).toThrow('stop')
     expect(engine.registry.getSceneObject('boom.box')).toBeUndefined()
     expect(engine.listPlugins().some((plugin) => plugin.id === 'boom.scene')).toBe(false)
+  })
+
+  it('keeps a separate event sheet on each layout', () => {
+    const engine = new Engine()
+    let document = engine.createBlankDocument()
+    const firstId = document.scenes.activeSceneId
+    const firstNodes = document.nodes.map((node) => node.id)
+    expect(firstNodes.length).toBeGreaterThan(0)
+    expect(activeScene(document).nodes.map((node) => node.id)).toEqual(firstNodes)
+
+    document = addScene(document, 'Второй')
+    expect(document.scenes.activeSceneId).not.toBe(firstId)
+    expect(document.nodes).toEqual([])
+    const extra = createNode(engine.registry, 'core.event.start', 40, 40, 'node_second')
+    document = addNode(document, extra)
+    expect(activeScene(document).nodes.map((node) => node.id)).toEqual(['node_second'])
+
+    document = setActiveScene(document, firstId)
+    expect(document.nodes.map((node) => node.id)).toEqual(firstNodes)
+    expect(activeScene(document).nodes.map((node) => node.id)).toEqual(firstNodes)
+    const second = document.scenes.scenes.find((scene) => scene.id !== firstId)
+    expect(second?.nodes.map((node) => node.id)).toEqual(['node_second'])
+  })
+
+  it('moves an old graph onto the active layout', () => {
+    const engine = new Engine()
+    const raw = JSON.parse(engine.serialize(engine.createDemoDocument())) as {
+      nodes: unknown[]
+      scenes: { scenes: Array<Record<string, unknown>> }
+    }
+    for (const scene of raw.scenes.scenes) {
+      delete scene.nodes
+      delete scene.edges
+    }
+    const document = engine.deserialize(JSON.stringify(raw))
+    expect(document.nodes.length).toBe(raw.nodes.length)
+    expect(activeScene(document).nodes).toEqual(document.nodes)
+    expect(engine.run(document).logs.map((entry) => entry.message)).toEqual(['Привет из NStudio', '42'])
+  })
+
+  it('stores an effect on the instance and one behavior per type', () => {
+    const engine = new Engine()
+    let document = engine.createDemoDocument()
+    const blur = engine.registry.getEffect('core.effect.blur')
+    const solid = engine.registry.getBehavior('core.behavior.solid')
+    if (!blur || !solid) throw new Error('нет модуля')
+    expect(blur.filter?.({ radius: 8 })).toBe('blur(8px)')
+    document = addInstanceEffect(document, document.scenes.activeSceneId, 'inst_player', blur)
+    document = addBehavior(document, 'type_player', solid)
+    expect(() => addBehavior(document, 'type_player', solid)).toThrow(/уже есть/)
+    const copy = engine.deserialize(engine.serialize(document))
+    const player = activeScene(copy).instances.find((item) => item.id === 'inst_player')
+    expect(player?.effects[0]?.kind).toBe('core.effect.blur')
+    expect(player?.effects[0]?.props).toEqual({ radius: 4 })
+    expect(copy.scenes.objectTypes.find((type) => type.id === 'type_player')?.behaviors[0]?.kind).toBe('core.behavior.solid')
+    expect(engine.run(copy).logs.map((entry) => entry.message)).toEqual(['Привет из NStudio', '42'])
+  })
+
+  it('rolls back a failed effect registration', () => {
+    const engine = new Engine()
+    expect(engine.registry.listEffects().map((effect) => effect.id)).toContain('core.effect.blur')
+    expect(engine.registry.listBehaviors().map((behavior) => behavior.id)).toContain('core.behavior.solid')
+    expect(() =>
+      engine.use(
+        definePlugin({
+          id: 'boom.fx',
+          name: 'Сбой',
+          version: '0.0.0',
+          register(api) {
+            api.registerEffect({
+              id: 'boom.effect.flash',
+              title: 'Вспышка',
+              description: '',
+              fields: [],
+              defaultProps: {},
+            })
+            throw new Error('stop')
+          },
+        }),
+      ),
+    ).toThrow('stop')
+    expect(engine.registry.getEffect('boom.effect.flash')).toBeUndefined()
+    expect(engine.listPlugins().some((plugin) => plugin.id === 'boom.fx')).toBe(false)
   })
 })

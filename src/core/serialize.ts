@@ -1,10 +1,10 @@
 import { DOCUMENT_VERSION } from './document'
 import { EngineError } from './errors'
-import { parseSceneProject } from './scene'
+import { parseSceneProject, syncActiveSheet } from './scene'
 import type { GraphDocument, GraphEdge, GraphNode, GraphVariable, Value } from './types'
 
 export function serializeDocument(document: GraphDocument): string {
-  return JSON.stringify(document, null, 2)
+  return JSON.stringify(syncActiveSheet(document), null, 2)
 }
 
 export function deserializeDocument(raw: string): GraphDocument {
@@ -26,16 +26,30 @@ export function deserializeDocument(raw: string): GraphDocument {
   assertUnique(edges.map((edge) => edge.id), 'связей')
   assertUnique(variables.map((variable) => variable.id), 'переменных')
 
+  let scenes = parseSceneProject(parsed.scenes)
+  if (!projectDeclaresSheets(parsed.scenes)) {
+    scenes = {
+      ...scenes,
+      scenes: scenes.scenes.map((scene) => (scene.id === scenes.activeSceneId ? { ...scene, nodes, edges } : scene)),
+    }
+  }
+  const active = scenes.scenes.find((scene) => scene.id === scenes.activeSceneId)
+
   return {
     version: DOCUMENT_VERSION,
     id: expectString(parsed.id, 'id'),
     name: expectString(parsed.name, 'name'),
-    nodes,
-    edges,
+    nodes: active?.nodes ?? [],
+    edges: active?.edges ?? [],
     variables,
     extensions: parseExtensions(parsed.extensions),
-    scenes: parseSceneProject(parsed.scenes),
+    scenes,
   }
+}
+
+function projectDeclaresSheets(raw: unknown): boolean {
+  if (!isRecord(raw) || !Array.isArray(raw.scenes)) return false
+  return raw.scenes.some((scene) => isRecord(scene) && Array.isArray(scene.nodes))
 }
 
 function parseNode(raw: unknown): GraphNode {

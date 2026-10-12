@@ -7,6 +7,8 @@ import type {
   NodeTypeDefinition,
   PluginApi,
   PluginInfo,
+  BehaviorDefinition,
+  EffectDefinition,
   PortDefinition,
   PropertyDefinition,
   SceneField,
@@ -19,6 +21,8 @@ interface Snapshot {
   dataTypes: Map<string, DataTypeDefinition>
   nodeTypes: Map<string, NodeTypeDefinition>
   sceneObjects: Map<string, SceneObjectKind>
+  effects: Map<string, EffectDefinition>
+  behaviors: Map<string, BehaviorDefinition>
   owners: Map<string, string>
 }
 
@@ -31,6 +35,8 @@ export class Registry {
   private dataTypes = new Map<string, DataTypeDefinition>()
   private nodeTypes = new Map<string, NodeTypeDefinition>()
   private sceneObjects = new Map<string, SceneObjectKind>()
+  private effects = new Map<string, EffectDefinition>()
+  private behaviors = new Map<string, BehaviorDefinition>()
   private owners = new Map<string, string>()
   private plugins: PluginInfo[] = []
   private currentPlugin: string | null = null
@@ -41,6 +47,8 @@ export class Registry {
     registerDataType: (dataType) => this.registerDataType(dataType),
     registerNodeType: (nodeType) => this.registerNodeType(nodeType),
     registerSceneObject: (kind) => this.registerSceneObject(kind),
+    registerEffect: (effect) => this.registerEffect(effect),
+    registerBehavior: (behavior) => this.registerBehavior(behavior),
   }
 
   beginPlugin(plugin: EnginePlugin): void {
@@ -59,6 +67,8 @@ export class Registry {
       dataTypes: new Map(this.dataTypes),
       nodeTypes: new Map(this.nodeTypes),
       sceneObjects: new Map(this.sceneObjects),
+      effects: new Map(this.effects),
+      behaviors: new Map(this.behaviors),
       owners: new Map(this.owners),
     }
   }
@@ -80,6 +90,8 @@ export class Registry {
       this.dataTypes = this.snapshot.dataTypes
       this.nodeTypes = this.snapshot.nodeTypes
       this.sceneObjects = this.snapshot.sceneObjects
+      this.effects = this.snapshot.effects
+      this.behaviors = this.snapshot.behaviors
       this.owners = this.snapshot.owners
     }
     this.currentPlugin = null
@@ -182,6 +194,14 @@ export class Registry {
     this.owners.set(kind.id, this.currentPlugin!)
   }
 
+  registerEffect(effect: EffectDefinition): void {
+    this.registerModule(effect, this.effects, 'эффекта', 'эффект')
+  }
+
+  registerBehavior(behavior: BehaviorDefinition): void {
+    this.registerModule(behavior, this.behaviors, 'поведения', 'поведение')
+  }
+
   getCategory(id: string): CategoryDefinition | undefined {
     return this.categories.get(id)
   }
@@ -204,6 +224,14 @@ export class Registry {
 
   getSceneOwner(kindId: string): string | undefined {
     return this.owners.get(kindId)
+  }
+
+  getEffect(id: string): EffectDefinition | undefined {
+    return this.effects.get(id)
+  }
+
+  getBehavior(id: string): BehaviorDefinition | undefined {
+    return this.behaviors.get(id)
   }
 
   requireDataType(id: string): DataTypeDefinition {
@@ -231,6 +259,14 @@ export class Registry {
 
   listSceneObjects(): SceneObjectKind[] {
     return [...this.sceneObjects.values()].sort((left, right) => left.title.localeCompare(right.title, 'ru'))
+  }
+
+  listEffects(): EffectDefinition[] {
+    return [...this.effects.values()].sort((left, right) => left.title.localeCompare(right.title, 'ru'))
+  }
+
+  listBehaviors(): BehaviorDefinition[] {
+    return [...this.behaviors.values()].sort((left, right) => left.title.localeCompare(right.title, 'ru'))
   }
 
   listPlugins(): PluginInfo[] {
@@ -325,13 +361,42 @@ export class Registry {
     }
   }
 
-  private copySceneField(kindId: string, field: SceneField): SceneField {
-    if (!PORT_ID.test(field.id)) {
-      throw new EngineError(`Поле «${field.id}» объекта «${kindId}» имеет недопустимый идентификатор`)
+  private registerModule<T extends EffectDefinition>(
+    module: T,
+    target: Map<string, T>,
+    noun: string,
+    label: string,
+  ): void {
+    this.assertPlugin()
+    if (!NODE_TYPE_ID.test(module.id)) {
+      throw new EngineError(`Идентификатор ${noun} «${module.id}» должен быть вроде core.effect.blur`)
     }
-    if (!field.label.trim()) throw new EngineError(`У поля «${field.id}» объекта «${kindId}» пустая подпись`)
+    if (target.has(module.id)) {
+      throw new EngineError(`Модуль «${module.id}» уже зарегистрирован`)
+    }
+    if (!module.title.trim()) throw new EngineError(`У модуля «${label}» пустое название`)
+    const fields = module.fields.map((field) => this.copySceneField(module.id, field, noun))
+    const seen = new Set<string>()
+    for (const field of fields) {
+      if (seen.has(field.id)) throw new EngineError(`У ${noun} «${module.id}» повторяется поле «${field.id}»`)
+      seen.add(field.id)
+    }
+    const defaultProps: Record<string, SceneValue> = {}
+    for (const [key, value] of Object.entries(module.defaultProps)) {
+      if (!isSceneValue(value)) throw new EngineError(`Свойство «${key}» модуля «${module.id}» не поддерживается`)
+      defaultProps[key] = value
+    }
+    target.set(module.id, { ...module, fields, defaultProps })
+    this.owners.set(module.id, this.currentPlugin!)
+  }
+
+  private copySceneField(kindId: string, field: SceneField, noun = 'объекта'): SceneField {
+    if (!PORT_ID.test(field.id)) {
+      throw new EngineError(`Поле «${field.id}» ${noun} «${kindId}» имеет недопустимый идентификатор`)
+    }
+    if (!field.label.trim()) throw new EngineError(`У поля «${field.id}» ${noun} «${kindId}» пустая подпись`)
     if (field.kind === 'select' && (!field.options || field.options.length === 0)) {
-      throw new EngineError(`Поле «${field.id}» объекта «${kindId}» должно перечислить варианты`)
+      throw new EngineError(`Поле «${field.id}» ${noun} «${kindId}» должно перечислить варианты`)
     }
     return {
       id: field.id,

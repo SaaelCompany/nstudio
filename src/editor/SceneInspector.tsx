@@ -1,6 +1,18 @@
 import { useState } from 'react'
-import { activeScene, patchInstances, renameScene, sendInstance, setSceneCanvas } from '../core'
-import type { SceneInstance, SceneValue } from '../core'
+import {
+  activeScene,
+  addBehavior,
+  addInstanceEffect,
+  patchBehavior,
+  patchInstanceEffect,
+  patchInstances,
+  removeBehavior,
+  removeInstanceEffect,
+  renameScene,
+  sendInstance,
+  setSceneCanvas,
+} from '../core'
+import type { SceneField, SceneInstance, SceneModule, SceneValue } from '../core'
 import { readImageFile } from './images'
 import type { useEditor } from './useEditor'
 
@@ -79,6 +91,45 @@ export function SceneInspector({ editor }: { editor: EditorController }) {
                 onEditEnd={editor.endEdit}
               />
             ))}
+            <ModuleSection
+              title="Эффекты"
+              empty="Эффектов нет. Виды подключаются в меню «Модули»."
+              addLabel="Добавить эффект"
+              items={instance.effects}
+              options={engine.registry.listEffects().map((effect) => ({ id: effect.id, title: effect.title }))}
+              define={(id) => engine.registry.getEffect(id)}
+              onAdd={(id) => {
+                const effect = engine.registry.getEffect(id)
+                if (!effect) return
+                editor.editDocument((document) => addInstanceEffect(document, scene.id, instance.id, effect), 'commit')
+              }}
+              onRemove={(id) => editor.editDocument((document) => removeInstanceEffect(document, scene.id, instance.id, id), 'commit')}
+              onPatch={(id, props, mode) =>
+                editor.editDocument((document) => patchInstanceEffect(document, scene.id, instance.id, id, props), mode)
+              }
+              onEditEnd={editor.endEdit}
+            />
+            {objectType ? (
+              <ModuleSection
+                title={`Поведения · тип «${objectType.name}»`}
+                empty="Поведений нет. Они общие для всех экземпляров этого типа."
+                addLabel="Добавить поведение"
+                items={objectType.behaviors}
+                options={engine.registry
+                  .listBehaviors()
+                  .filter((behavior) => !objectType.behaviors.some((item) => item.kind === behavior.id))
+                  .map((behavior) => ({ id: behavior.id, title: behavior.title }))}
+                define={(id) => engine.registry.getBehavior(id)}
+                onAdd={(id) => {
+                  const behavior = engine.registry.getBehavior(id)
+                  if (!behavior) return
+                  editor.editDocument((document) => addBehavior(document, objectType.id, behavior), 'commit')
+                }}
+                onRemove={(id) => editor.editDocument((document) => removeBehavior(document, objectType.id, id), 'commit')}
+                onPatch={(id, props, mode) => editor.editDocument((document) => patchBehavior(document, objectType.id, id, props), mode)}
+                onEditEnd={editor.endEdit}
+              />
+            ) : null}
             <div className="row-actions">
               <button type="button" onClick={() => editor.editDocument((document) => sendInstance(document, scene.id, instance.id, 1), 'commit')}>
                 Выше
@@ -191,6 +242,73 @@ function SpriteField({ instance, editor, sceneId }: { instance: SceneInstance; e
         </button>
       </div>
     </div>
+  )
+}
+
+function ModuleSection({
+  title,
+  empty,
+  addLabel,
+  items,
+  options,
+  define,
+  onAdd,
+  onRemove,
+  onPatch,
+  onEditEnd,
+}: {
+  title: string
+  empty: string
+  addLabel: string
+  items: SceneModule[]
+  options: { id: string; title: string }[]
+  define: (kind: string) => { title: string; fields: SceneField[] } | undefined
+  onAdd: (kind: string) => void
+  onRemove: (id: string) => void
+  onPatch: (id: string, props: Record<string, SceneValue>, mode: 'preview' | 'commit') => void
+  onEditEnd: () => void
+}) {
+  return (
+    <section className="module-block">
+      <h3 className="prop-section">{title}</h3>
+      {items.length === 0 ? <p className="muted">{empty}</p> : null}
+      {items.map((item) => {
+        const definition = define(item.kind)
+        return (
+          <div key={item.id} className="module-card">
+            <div className="section-head">
+              <strong>{definition?.title ?? item.kind}</strong>
+              <button type="button" className="ghost" aria-label={`Убрать ${definition?.title ?? item.kind}`} onClick={() => onRemove(item.id)}>
+                ×
+              </button>
+            </div>
+            {definition?.fields.map((field) => (
+              <FieldEditor
+                key={field.id}
+                label={field.label}
+                kind={field.kind}
+                options={field.options}
+                value={item.props[field.id]}
+                onChange={(value, mode) => onPatch(item.id, { [field.id]: value }, mode)}
+                onEditEnd={onEditEnd}
+              />
+            ))}
+            {!definition ? <p className="muted">Модуль «{item.kind}» не подключён. Данные сохранены.</p> : null}
+          </div>
+        )
+      })}
+      <label className="field">
+        <span>{addLabel}</span>
+        <select aria-label={addLabel} value="" onChange={(event) => event.target.value && onAdd(event.target.value)}>
+          <option value="">Выбрать…</option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.title}
+            </option>
+          ))}
+        </select>
+      </label>
+    </section>
   )
 }
 

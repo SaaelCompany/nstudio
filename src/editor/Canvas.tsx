@@ -24,6 +24,7 @@ interface CanvasProps {
   onChangeProperty: (nodeId: string, propertyId: string, value: Value, mode: 'preview' | 'commit') => void
   onChangeInput: (nodeId: string, portId: string, value: Value, mode: 'preview' | 'commit') => void
   onEditEnd: () => void
+  sheetLabel?: string
 }
 
 interface LinkDraft {
@@ -337,6 +338,11 @@ export function Canvas(props: CanvasProps) {
         backgroundPosition: `${props.viewport.x}px ${props.viewport.y}px`,
       }}
     >
+      {props.sheetLabel ? (
+        <div className="sheet-caption" data-testid="sheet-caption">
+          {props.sheetLabel}
+        </div>
+      ) : null}
       <svg className="wires" aria-hidden="true">
         {props.document.edges.map((edge) => {
           const from = anchors[`${edge.sourceNodeId}:${edge.sourcePortId}`]

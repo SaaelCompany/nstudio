@@ -39,7 +39,16 @@ export function createDemoDocument(registry: Registry): GraphDocument {
   link('two', 'value', 'sum', 'a')
   link('forty', 'value', 'sum', 'b')
   link('sum', 'result', 'print_sum', 'value')
-  document = { ...document, scenes: createDemoSceneProject() }
+  const scenes = createDemoSceneProject()
+  document = {
+    ...document,
+    scenes: {
+      ...scenes,
+      scenes: scenes.scenes.map((scene) =>
+        scene.id === scenes.activeSceneId ? { ...scene, nodes: document.nodes, edges: document.edges } : scene,
+      ),
+    },
+  }
 
   return document
 }

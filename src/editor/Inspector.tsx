@@ -123,7 +123,7 @@ function ProjectPanel({ editor, document }: { editor: EditorController; document
         <button type="button" disabled={editor.exampleLoaded} onClick={editor.loadExamplePlugin}>
           {editor.exampleLoaded ? 'Пример подключён' : 'Подключить пример плагина'}
         </button>
-        <p className="muted">Плагин — это модуль с методом register. Файл проекта код не исполняет.</p>
+        <p className="muted">Плагины, эффекты и поведения подключаются кнопкой «Модули». Файл проекта код не исполняет.</p>
       </section>
     </div>
   )

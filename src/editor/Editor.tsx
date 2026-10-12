@@ -3,6 +3,7 @@ import { activeScene, formatValue } from '../core'
 import type { GraphDocument } from '../core'
 import { Canvas } from './Canvas'
 import { Inspector } from './Inspector'
+import { ModulesDialog } from './ModulesDialog'
 import { NodeTypeList } from './NodeTypeList'
 import type { Point } from './geometry'
 import { SceneCanvas } from './SceneCanvas'
@@ -16,6 +17,8 @@ export function Editor() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(state.document.name)
   const [pointer, setPointer] = useState<Point | null>(null)
+  const [modulesOpen, setModulesOpen] = useState(false)
+  const sheetLabel = `События · ${activeScene(state.document).name}`
   useEffect(() => setName(state.document.name), [state.document.name])
 
   const addAtCenter = (typeId: string) => {
@@ -70,6 +73,9 @@ export function Editor() {
           <button type="button" onClick={editor.save} title="Сохранить (Ctrl+S)">
             Сохранить
           </button>
+          <button type="button" data-testid="modules-button" onClick={() => setModulesOpen(true)}>
+            Модули
+          </button>
           <input
             ref={fileRef}
             className="file-input"
@@ -111,7 +117,7 @@ export function Editor() {
               Макет
             </button>
             <button type="button" role="tab" data-testid="mode-nodes" aria-selected={state.mode === 'nodes'} onClick={() => editor.setMode('nodes')}>
-              События
+              {sheetLabel}
             </button>
           </div>
           {state.mode === 'scene' ? (
@@ -122,6 +128,7 @@ export function Editor() {
               gridEnabled={state.gridEnabled}
               snapEnabled={state.snapEnabled}
               gridSize={state.gridSize}
+              registry={engine.registry}
               onViewport={editor.setSceneViewport}
               onHover={setPointer}
               onSelect={editor.selectInstances}
@@ -149,6 +156,7 @@ export function Editor() {
               onChangeProperty={editor.changeProperty}
               onChangeInput={editor.changeInput}
               onEditEnd={editor.endEdit}
+              sheetLabel={sheetLabel}
             />
           )}
         <section className="console" data-testid="console">
@@ -189,6 +197,7 @@ export function Editor() {
         </div>
         {state.mode === 'scene' ? <SceneDock editor={editor} /> : <Inspector editor={editor} />}
       </div>
+      {modulesOpen ? <ModulesDialog editor={editor} onClose={() => setModulesOpen(false)} /> : null}
       <footer className="status">
         <span>{state.mode === 'scene' ? sceneStatus(state.document, state.sceneViewport.zoom, pointer) : nodeStatus(state)}</span>
         <span className={state.notice ? 'notice' : 'muted'}>{state.notice ?? 'Готово'}</span>
@@ -204,6 +213,7 @@ function sceneStatus(document: GraphDocument, zoom: number, pointer: Point | nul
   return `Мышь (${mouse}) · ${layer?.name ?? 'Слой'} · ${Math.round(zoom * 100)}%`
 }
 
-function nodeStatus(state: { document: { nodes: unknown[]; edges: unknown[] }; viewport: { zoom: number } }): string {
-  return `${state.document.nodes.length} нод · ${state.document.edges.length} связей · ${Math.round(state.viewport.zoom * 100)}%`
+function nodeStatus(state: { document: GraphDocument; viewport: { zoom: number } }): string {
+  const scene = activeScene(state.document)
+  return `${scene.name} · ${state.document.nodes.length} нод · ${state.document.edges.length} связей · ${Math.round(state.viewport.zoom * 100)}%`
 }

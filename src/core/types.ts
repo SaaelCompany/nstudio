@@ -115,11 +115,41 @@ export interface SceneObjectKind {
   fields: SceneField[]
 }
 
+/** Visual treatment drawn on one instance. `filter` is preview-only and is not saved. */
+export interface EffectDefinition {
+  id: string
+  title: string
+  description: string
+  fields: SceneField[]
+  defaultProps: Record<string, SceneValue>
+  filter?: (props: Record<string, SceneValue>) => string
+}
+
+/**
+ * Data attached to an object type. The core stores it and does not run a game loop.
+ * A later module reads the values and applies the behavior.
+ */
+export interface BehaviorDefinition {
+  id: string
+  title: string
+  description: string
+  fields: SceneField[]
+  defaultProps: Record<string, SceneValue>
+}
+
+/** One attached effect or behavior. The kind id points at a registered module. */
+export interface SceneModule {
+  id: string
+  kind: string
+  props: Record<string, SceneValue>
+}
+
 export interface SceneObjectType {
   id: string
   name: string
   kind: string
   defaults: Record<string, SceneValue>
+  behaviors: SceneModule[]
 }
 
 export interface SceneLayer {
@@ -141,6 +171,7 @@ export interface SceneInstance {
   angle: number
   opacity: number
   props: Record<string, SceneValue>
+  effects: SceneModule[]
 }
 
 export interface Scene {
@@ -151,6 +182,9 @@ export interface Scene {
   background: string
   layers: SceneLayer[]
   instances: SceneInstance[]
+  /** Event sheet for this layout. The document mirrors the active scene. */
+  nodes: GraphNode[]
+  edges: GraphEdge[]
 }
 
 export interface SceneProject {
@@ -165,6 +199,8 @@ export interface PluginApi {
   registerDataType(dataType: DataTypeDefinition): void
   registerNodeType(nodeType: NodeTypeDefinition): void
   registerSceneObject(kind: SceneObjectKind): void
+  registerEffect(effect: EffectDefinition): void
+  registerBehavior(behavior: BehaviorDefinition): void
 }
 
 export interface GraphNode {

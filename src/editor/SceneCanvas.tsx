@@ -9,7 +9,7 @@ import {
   snapValue,
   updateInstances,
 } from '../core'
-import type { GraphDocument, ResizeHandle, SceneBox, SceneInstance, SceneObjectType, SceneValue } from '../core'
+import type { GraphDocument, Registry, ResizeHandle, SceneBox, SceneInstance, SceneObjectType, SceneValue } from '../core'
 import { frameLayout, screenToWorld, zoomAt } from './geometry'
 import type { Point, Viewport } from './geometry'
 import { readImageFile } from './images'
@@ -25,6 +25,7 @@ interface SceneCanvasProps {
   gridEnabled: boolean
   snapEnabled: boolean
   gridSize: number
+  registry: Registry
   onViewport: (viewport: Viewport) => void
   onHover: (point: Point | null) => void
   onSelect: (ids: string[]) => void
@@ -367,6 +368,7 @@ export function SceneCanvas(props: SceneCanvasProps) {
                       type={props.document.scenes.objectTypes.find((item) => item.id === instance.typeId)}
                       selected={props.selectedIds.includes(instance.id)}
                       locked={layer.locked}
+                      registry={props.registry}
                     />
                   ))
               : null,
@@ -405,11 +407,13 @@ function SceneObject({
   type,
   selected,
   locked,
+  registry,
 }: {
   instance: SceneInstance
   type: SceneObjectType | undefined
   selected: boolean
   locked: boolean
+  registry: Registry
 }) {
   return (
     <div
@@ -425,7 +429,7 @@ function SceneObject({
         pointerEvents: locked ? 'none' : 'auto',
       }}
     >
-      <div className="scene-body" style={{ opacity: instance.opacity }}>
+      <div className="scene-body" style={{ opacity: instance.opacity, filter: effectCss(instance, registry) }}>
         <InstanceBody instance={instance} type={type} />
       </div>
     </div>
@@ -507,6 +511,15 @@ function distance(from: Point, to: Point): number {
 
 function prefixed(value: string, prefix: string): string {
   return value.startsWith(prefix) ? value.slice(prefix.length) : ''
+}
+
+function effectCss(instance: SceneInstance, registry: Registry): string | undefined {
+  const parts: string[] = []
+  for (const effect of instance.effects) {
+    const css = registry.getEffect(effect.kind)?.filter?.(effect.props)
+    if (css) parts.push(css)
+  }
+  return parts.length > 0 ? parts.join(' ') : undefined
 }
 
 function round2(value: number): number {

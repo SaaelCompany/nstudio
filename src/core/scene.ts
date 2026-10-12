@@ -1,14 +1,20 @@
 import { EngineError } from './errors'
 import { createId } from './ids'
 import type {
+  BehaviorDefinition,
+  EffectDefinition,
   GraphDocument,
+  GraphEdge,
+  GraphNode,
   Scene,
   SceneInstance,
   SceneLayer,
+  SceneModule,
   SceneObjectKind,
   SceneObjectType,
   SceneProject,
   SceneValue,
+  Value,
 } from './types'
 
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
@@ -50,6 +56,8 @@ export function createDemoSceneProject(): SceneProject {
     height: 540,
     background: '#172033',
     layers: [layer],
+    nodes: [],
+    edges: [],
     instances: [
       instanceOf(ground, layer.id, 0, 460, 960, 80, 'inst_ground'),
       instanceOf(player, layer.id, 128, 332, 80, 80, 'inst_player'),
@@ -68,15 +76,34 @@ export function activeScene(document: GraphDocument): Scene {
   return requireScene(document, document.scenes.activeSceneId)
 }
 
-export function addScene(document: GraphDocument, name?: string): GraphDocument {
-  const scene = sceneOf(uniqueName(document.scenes.scenes.map((item) => item.name), name?.trim() || 'Макет'))
+/** Copy the live graph onto the active layout so the sheet and the document stay one graph. */
+export function syncActiveSheet(document: GraphDocument): GraphDocument {
+  const activeId = document.scenes.activeSceneId
+  const active = document.scenes.scenes.find((scene) => scene.id === activeId)
+  if (!active || (active.nodes === document.nodes && active.edges === document.edges)) return document
   return {
     ...document,
     scenes: {
       ...document.scenes,
+      scenes: document.scenes.scenes.map((scene) =>
+        scene.id === activeId ? { ...scene, nodes: document.nodes, edges: document.edges } : scene,
+      ),
+    },
+  }
+}
+
+export function addScene(document: GraphDocument, name?: string): GraphDocument {
+  const saved = syncActiveSheet(document)
+  const scene = sceneOf(uniqueName(saved.scenes.scenes.map((item) => item.name), name?.trim() || 'Макет'))
+  return {
+    ...saved,
+    nodes: scene.nodes,
+    edges: scene.edges,
+    scenes: {
+      ...saved.scenes,
       activeSceneId: scene.id,
-      activeLayerId: scene.layers[0]?.id ?? document.scenes.activeLayerId,
-      scenes: [...document.scenes.scenes, scene],
+      activeLayerId: scene.layers[0]?.id ?? saved.scenes.activeLayerId,
+      scenes: [...saved.scenes.scenes, scene],
     },
   }
 }
@@ -88,28 +115,37 @@ export function renameScene(document: GraphDocument, sceneId: string, name: stri
 }
 
 export function removeScene(document: GraphDocument, sceneId: string): GraphDocument {
-  if (document.scenes.scenes.length <= 1) throw new EngineError('В проекте должна остаться хотя бы одна сцена')
-  const scenes = document.scenes.scenes.filter((scene) => scene.id !== sceneId)
-  const active = scenes.find((scene) => scene.id === document.scenes.activeSceneId) ?? scenes[0]
+  const saved = syncActiveSheet(document)
+  if (saved.scenes.scenes.length <= 1) throw new EngineError('В проекте должна остаться хотя бы одна сцена')
+  const scenes = saved.scenes.scenes.filter((scene) => scene.id !== sceneId)
+  const active = scenes.find((scene) => scene.id === saved.scenes.activeSceneId) ?? scenes[0]
   if (!active) throw new EngineError('В проекте должна остаться хотя бы одна сцена')
   return {
-    ...document,
+    ...saved,
+    nodes: active.nodes,
+    edges: active.edges,
     scenes: {
-      ...document.scenes,
+      ...saved.scenes,
       scenes,
       activeSceneId: active.id,
-      activeLayerId: active.layers.some((layer) => layer.id === document.scenes.activeLayerId)
-        ? document.scenes.activeLayerId
-        : (active.layers[0]?.id ?? document.scenes.activeLayerId),
+      activeLayerId: active.layers.some((layer) => layer.id === saved.scenes.activeLayerId)
+        ? saved.scenes.activeLayerId
+        : (active.layers[0]?.id ?? saved.scenes.activeLayerId),
     },
   }
 }
 
 export function setActiveScene(document: GraphDocument, sceneId: string): GraphDocument {
-  const scene = requireScene(document, sceneId)
-  const layer = scene.layers.find((item) => item.id === document.scenes.activeLayerId) ?? scene.layers[0]
+  const saved = syncActiveSheet(document)
+  const scene = requireScene(saved, sceneId)
+  const layer = scene.layers.find((item) => item.id === saved.scenes.activeLayerId) ?? scene.layers[0]
   if (!layer) throw new EngineError('У сцены нет слоя')
-  return { ...document, scenes: { ...document.scenes, activeSceneId: scene.id, activeLayerId: layer.id } }
+  return {
+    ...saved,
+    nodes: scene.nodes,
+    edges: scene.edges,
+    scenes: { ...saved.scenes, activeSceneId: scene.id, activeLayerId: layer.id },
+  }
 }
 
 export function setSceneCanvas(
@@ -297,6 +333,7 @@ export function duplicateInstances(
       x: instance.x + offset,
       y: instance.y + offset,
       props: { ...instance.props },
+      effects: instance.effects.map((effect) => ({ ...effect, id: createId('mod'), props: { ...effect.props } })),
     })
   }
   return {
@@ -455,6 +492,8 @@ function sceneOf(name: string, layers?: SceneLayer[]): Scene {
     background: '#172033',
     layers: layer,
     instances: [],
+    nodes: [],
+    edges: [],
   }
 }
 
@@ -463,7 +502,7 @@ function layerOf(name: string, id = createId('layer')): SceneLayer {
 }
 
 function objectType(name: string, kind: string, defaults: Record<string, SceneValue>, id = createId('type')): SceneObjectType {
-  return { id, name, kind, defaults: { ...defaults } }
+  return { id, name, kind, defaults: { ...defaults }, behaviors: [] }
 }
 
 function instanceOf(
@@ -487,6 +526,7 @@ function instanceOf(
     angle: 0,
     opacity: 1,
     props: { ...type.defaults },
+    effects: [],
   }
 }
 
@@ -500,6 +540,107 @@ function uniqueName(names: string[], base: string): string {
 function clampSize(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
   return Math.min(max, Math.max(min, Math.round(value)))
+}
+
+export function addInstanceEffect(
+  document: GraphDocument,
+  sceneId: string,
+  instanceId: string,
+  effect: Pick<EffectDefinition, 'id' | 'defaultProps'>,
+): GraphDocument {
+  return mapInstances(document, sceneId, instanceId, (instance) => ({
+    ...instance,
+    effects: [...instance.effects, moduleOf(effect.id, effect.defaultProps)],
+  }))
+}
+
+export function removeInstanceEffect(document: GraphDocument, sceneId: string, instanceId: string, effectId: string): GraphDocument {
+  return mapInstances(document, sceneId, instanceId, (instance) => ({
+    ...instance,
+    effects: instance.effects.filter((effect) => effect.id !== effectId),
+  }))
+}
+
+export function patchInstanceEffect(
+  document: GraphDocument,
+  sceneId: string,
+  instanceId: string,
+  effectId: string,
+  props: Record<string, SceneValue>,
+): GraphDocument {
+  return mapInstances(document, sceneId, instanceId, (instance) => ({
+    ...instance,
+    effects: instance.effects.map((effect) => (effect.id === effectId ? { ...effect, props: { ...effect.props, ...props } } : effect)),
+  }))
+}
+
+export function addBehavior(
+  document: GraphDocument,
+  typeId: string,
+  behavior: Pick<BehaviorDefinition, 'id' | 'title' | 'defaultProps'>,
+): GraphDocument {
+  const type = requireType(document, typeId)
+  if (type.behaviors.some((item) => item.kind === behavior.id)) {
+    throw new EngineError(`Поведение «${behavior.title}» уже есть у этого типа`)
+  }
+  return mapObjectType(document, typeId, (current) => ({
+    ...current,
+    behaviors: [...current.behaviors, moduleOf(behavior.id, behavior.defaultProps)],
+  }))
+}
+
+export function removeBehavior(document: GraphDocument, typeId: string, behaviorId: string): GraphDocument {
+  return mapObjectType(document, typeId, (type) => ({
+    ...type,
+    behaviors: type.behaviors.filter((behavior) => behavior.id !== behaviorId),
+  }))
+}
+
+export function patchBehavior(
+  document: GraphDocument,
+  typeId: string,
+  behaviorId: string,
+  props: Record<string, SceneValue>,
+): GraphDocument {
+  return mapObjectType(document, typeId, (type) => ({
+    ...type,
+    behaviors: type.behaviors.map((behavior) =>
+      behavior.id === behaviorId ? { ...behavior, props: { ...behavior.props, ...props } } : behavior,
+    ),
+  }))
+}
+
+function moduleOf(kind: string, defaults: Record<string, SceneValue>): SceneModule {
+  return { id: createId('mod'), kind, props: { ...defaults } }
+}
+
+function mapInstances(
+  document: GraphDocument,
+  sceneId: string,
+  instanceId: string,
+  mapper: (instance: SceneInstance) => SceneInstance,
+): GraphDocument {
+  const scene = requireScene(document, sceneId)
+  if (!scene.instances.some((instance) => instance.id === instanceId)) throw new EngineError('Экземпляр не найден')
+  return mapScene(document, sceneId, (current) => ({
+    ...current,
+    instances: current.instances.map((instance) => (instance.id === instanceId ? mapper(instance) : instance)),
+  }))
+}
+
+function mapObjectType(
+  document: GraphDocument,
+  typeId: string,
+  mapper: (type: SceneObjectType) => SceneObjectType,
+): GraphDocument {
+  if (!document.scenes.objectTypes.some((type) => type.id === typeId)) throw new EngineError('Объект не найден')
+  return {
+    ...document,
+    scenes: {
+      ...document.scenes,
+      objectTypes: document.scenes.objectTypes.map((type) => (type.id === typeId ? mapper(type) : type)),
+    },
+  }
 }
 
 export function parseSceneProject(raw: unknown): SceneProject {
@@ -525,6 +666,8 @@ function parseScene(raw: unknown): Scene {
   const layerIds = new Set(layers.map((layer) => layer.id))
   const instances = expectArray(raw.instances, 'instances').map((item) => parseInstance(item, layerIds))
   assertUnique(instances.map((instance) => instance.id), 'экземпляров')
+  const nodes = parseSheetNodes(raw.nodes)
+  const edges = parseSheetEdges(raw.edges)
   return {
     id: expectString(raw.id, 'scene.id'),
     name: expectString(raw.name, 'scene.name'),
@@ -533,6 +676,8 @@ function parseScene(raw: unknown): Scene {
     background: expectString(raw.background, 'scene.background'),
     layers,
     instances,
+    nodes,
+    edges,
   }
 }
 
@@ -553,6 +698,7 @@ function parseObjectType(raw: unknown): SceneObjectType {
     name: expectString(raw.name, 'objectType.name'),
     kind: expectString(raw.kind, 'objectType.kind'),
     defaults: parseProps(raw.defaults),
+    behaviors: parseModules(raw.behaviors, 'behaviors'),
   }
 }
 
@@ -572,6 +718,7 @@ function parseInstance(raw: unknown, layerIds: Set<string>): SceneInstance {
     angle: typeof raw.angle === 'number' && Number.isFinite(raw.angle) ? raw.angle : 0,
     opacity: typeof raw.opacity === 'number' && Number.isFinite(raw.opacity) ? Math.min(1, Math.max(0, raw.opacity)) : 1,
     props: parseProps(raw.props),
+    effects: parseModules(raw.effects, 'effects'),
   }
 }
 
@@ -604,6 +751,89 @@ function expectFinite(raw: unknown, label: string): number {
 
 function assertUnique(ids: string[], label: string): void {
   if (new Set(ids).size !== ids.length) throw new EngineError(`В документе повторяются идентификаторы ${label}`)
+}
+
+function parseModules(raw: unknown, label: string): SceneModule[] {
+  if (raw === undefined) return []
+  const modules = expectArray(raw, label).map((item) => {
+    if (!isRecord(item)) throw new EngineError(`${label} должен быть объектом`)
+    return {
+      id: expectString(item.id, `${label}.id`),
+      kind: expectString(item.kind, `${label}.kind`),
+      props: parseProps(item.props),
+    }
+  })
+  assertUnique(modules.map((item) => item.id), label)
+  return modules
+}
+
+function parseSheetNodes(raw: unknown): GraphNode[] {
+  if (raw === undefined) return []
+  const nodes = expectArray(raw, 'scene.nodes').map(parseSheetNode)
+  assertUnique(nodes.map((node) => node.id), 'нод')
+  return nodes
+}
+
+function parseSheetEdges(raw: unknown): GraphEdge[] {
+  if (raw === undefined) return []
+  const edges = expectArray(raw, 'scene.edges').map(parseSheetEdge)
+  assertUnique(edges.map((edge) => edge.id), 'связей')
+  return edges
+}
+
+function parseSheetNode(raw: unknown): GraphNode {
+  if (!isRecord(raw)) throw new EngineError('Нода должна быть объектом')
+  return {
+    id: expectString(raw.id, 'node.id'),
+    typeId: expectString(raw.typeId, 'node.typeId'),
+    x: expectFinite(raw.x, 'node.x'),
+    y: expectFinite(raw.y, 'node.y'),
+    properties: parseValueMap(raw.properties),
+    inputs: parseValueMap(raw.inputs),
+    extensions: parseExtensions(raw.extensions),
+  }
+}
+
+function parseSheetEdge(raw: unknown): GraphEdge {
+  if (!isRecord(raw)) throw new EngineError('Связь должна быть объектом')
+  return {
+    id: expectString(raw.id, 'edge.id'),
+    sourceNodeId: expectString(raw.sourceNodeId, 'edge.sourceNodeId'),
+    sourcePortId: expectString(raw.sourcePortId, 'edge.sourcePortId'),
+    targetNodeId: expectString(raw.targetNodeId, 'edge.targetNodeId'),
+    targetPortId: expectString(raw.targetPortId, 'edge.targetPortId'),
+  }
+}
+
+function parseValueMap(raw: unknown): Record<string, Value> {
+  if (raw === undefined) return {}
+  if (!isRecord(raw)) throw new EngineError('Свойства ноды должны быть объектом')
+  const result: Record<string, Value> = {}
+  for (const [key, value] of Object.entries(raw)) result[key] = parseSheetValue(value)
+  return result
+}
+
+function parseSheetValue(raw: unknown): Value {
+  if (!isRecord(raw) || typeof raw.type !== 'string' || !isJsonValue(raw.data)) {
+    throw new EngineError('Значение ноды должно быть объектом { type, data }')
+  }
+  return { type: raw.type, data: raw.data }
+}
+
+function parseExtensions(raw: unknown): Record<string, unknown> {
+  if (raw === undefined) return {}
+  if (!isRecord(raw) || !isJsonValue(raw)) throw new EngineError('extensions должен быть JSON-объектом')
+  return raw
+}
+
+function isJsonValue(value: unknown): boolean {
+  if (value === null) return true
+  const kind = typeof value
+  if (kind === 'string' || kind === 'boolean') return true
+  if (kind === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  if (isRecord(value)) return Object.values(value).every(isJsonValue)
+  return false
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

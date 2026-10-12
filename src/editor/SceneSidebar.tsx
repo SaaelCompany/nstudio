@@ -8,7 +8,6 @@ import {
   removeLayer,
   removeScene,
   setActiveLayer,
-  setActiveScene,
 } from '../core'
 import type { SceneObjectKind } from '../core'
 import { screenToWorld } from './geometry'
@@ -64,7 +63,14 @@ export function SceneDock({ editor }: { editor: EditorController }) {
         <div className="tree">
           <div className="tree-label">
             Макеты
-            <button type="button" onClick={() => editor.editDocument((document) => addScene(document), 'commit')}>
+            <button
+              type="button"
+              onClick={() => {
+                editor.select([], [])
+                editor.selectInstances([])
+                editor.editDocument((document) => addScene(document), 'commit')
+              }}
+            >
               +
             </button>
           </div>
@@ -73,10 +79,7 @@ export function SceneDock({ editor }: { editor: EditorController }) {
               <button
                 type="button"
                 className={`tree-item${item.id === scene.id ? ' active' : ''}`}
-                onClick={() => {
-                  editor.selectInstances([])
-                  editor.editDocument((document) => setActiveScene(document, item.id), 'commit')
-                }}
+                onClick={() => editor.openScene(item.id)}
               >
                 {item.name}
               </button>
@@ -86,6 +89,7 @@ export function SceneDock({ editor }: { editor: EditorController }) {
                   className="icon-button danger"
                   aria-label={`Удалить макет ${item.name}`}
                   onClick={() => {
+                    editor.select([], [])
                     editor.selectInstances([])
                     editor.editDocument((document) => removeScene(document, item.id), 'commit')
                   }}

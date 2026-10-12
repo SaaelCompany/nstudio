@@ -28,6 +28,8 @@ export { runDocument } from './runtime'
 export { createBlankDocument, createDemoDocument } from './sample'
 export {
   activeScene,
+  addBehavior,
+  addInstanceEffect,
   addLayer,
   addObjectType,
   addScene,
@@ -39,9 +41,13 @@ export {
   instanceBounds,
   moveLayer,
   parseSceneProject,
+  patchBehavior,
+  patchInstanceEffect,
   patchInstances,
   patchLayer,
   placeInstance,
+  removeBehavior,
+  removeInstanceEffect,
   removeInstances,
   removeLayer,
   removeScene,
@@ -52,14 +58,17 @@ export {
   setActiveScene,
   setSceneCanvas,
   snapValue,
+  syncActiveSheet,
   updateInstances,
 } from './scene'
 export type { ResizeHandle, SceneBox } from './scene'
 export { deserializeDocument, serializeDocument } from './serialize'
 export type {
+  BehaviorDefinition,
   CategoryDefinition,
   DataTypeDefinition,
   Diagnostic,
+  EffectDefinition,
   EnginePlugin,
   EvaluationContext,
   GraphDocument,
@@ -83,6 +92,7 @@ export type {
   SceneField,
   SceneInstance,
   SceneLayer,
+  SceneModule,
   SceneObjectKind,
   SceneObjectType,
   SceneProject,
